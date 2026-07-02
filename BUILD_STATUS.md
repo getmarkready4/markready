@@ -334,9 +334,17 @@ eslint 0 errors (2 known warnings), 8/8 tests, build green.
   request (this also resolves the long-standing `prefer-const` lint error correctly).
 - **`MAINTENANCE_MODE=1` kill switch added to `proxy.ts`** (2026-07-02): all `/api/*` → 503, UI
   routes → `/login` redirect, checked before any Supabase call. NOT YET DEPLOYED — Vercel still
-  runs the pre-dashboard build; `OPENROUTER_API_KEY` was deleted from Vercel env as the interim
-  lockdown. To deploy: push code, set `MAINTENANCE_MODE=1` in Vercel, redeploy. To go live:
-  restore the OpenRouter key, remove `MAINTENANCE_MODE`, redeploy.
+  runs the pre-dashboard build.
+- **Git + Vercel wiring (2026-07-03):** initial commit pushed to private repo
+  `github.com/Albertc11/markready` (origin, HTTPS; creds in git credential store). Vercel project
+  `markready` connected to that repo (production branch `main`, Root Directory set to `markready`
+  via API — required because the app lives in a subfolder). Env restored in Vercel Production:
+  `OPENROUTER_API_KEY`, `OPENROUTER_MODEL=anthropic/claude-haiku-4.5`, plus `MAINTENANCE_MODE=1`.
+  **Next `git push` to main auto-deploys** the new build WITH the maintenance gate active
+  (`/api/*` → 503). To go live for users: remove `MAINTENANCE_MODE` in Vercel and redeploy.
+  Old public repo `Albertc11/ai-exam-coach` is empty of content and unused — delete/archive at will;
+  its SSH deploy key does not work for the new repo (pushes use HTTPS). `pdf_pages/` (88MB raw
+  copyrighted scans) is excluded from git via root `.gitignore`.
 
 ### 2026-07-02 — API abuse hardening (`/api/score`)
 Plan/review pipeline in `feature-research/api-abuse-hardening/`. One file changed: `route.ts`.
