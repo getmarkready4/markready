@@ -1,0 +1,79 @@
+[
+  {
+    "model": "google/gemini-2.5-pro",
+    "mae": NaN,
+    "w05": 0,
+    "w10": 0,
+    "t2_mae": NaN,
+    "t2_w05": 0,
+    "t1_mae": NaN,
+    "t1_w05": 0,
+    "fails": 20
+  },
+  {
+    "model": "z-ai/glm-4.7-flash",
+    "mae": NaN,
+    "w05": 0,
+    "w10": 0,
+    "t2_mae": NaN,
+    "t2_w05": 0,
+    "t1_mae": NaN,
+    "t1_w05": 0,
+    "fails": 20
+  },
+  {
+    "model": "google/gemini-2.5-flash",
+    "mae": 0.7,
+    "w05": 50,
+    "w10": 90,
+    "t2_mae": 0.611,
+    "t2_w05": 56,
+    "t1_mae": 0.773,
+    "t1_w05": 45,
+    "fails": 0
+  },
+  {
+    "model": "z-ai/glm-5.2",
+    "mae": 0.0,
+    "w05": 100,
+    "w10": 100,
+    "t2_mae": NaN,
+    "t2_w05": 0,
+    "t1_mae": 0.0,
+    "t1_w05": 100,
+    "fails": 19
+  },
+  {
+    "model": "deepseek/deepseek-v4-flash",
+    "mae": 0.75,
+    "w05": 50,
+    "w10": 100,
+    "t2_mae": NaN,
+    "t2_w05": 0,
+    "t1_mae": 0.75,
+    "t1_w05": 50,
+    "fails": 18
+  },
+  {
+    "model": "anthropic/claude-haiku-4.5",
+    "mae": 0.475,
+    "w05": 75,
+    "w10": 90,
+    "t2_mae": 0.333,
+    "t2_w05": 78,
+    "t1_mae": 0.591,
+    "t1_w05": 73,
+    "fails": 0
+  },
+  {
+    "model": "qwen/qwen3.6-flash",
+    "mae": 0.5,
+    "w05": 91,
+    "w10": 91,
+    "t2_mae": 0.4,
+    "t2_w05": 100,
+    "t1_mae": 0.583,
+    "t1_w05": 83,
+    "fails": 9
+  }
+]

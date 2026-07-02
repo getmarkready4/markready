@@ -1,0 +1,6 @@
+# Raw Cambridge IELTS page scans + OCR (88MB, copyrighted source material).
+# The derived corpus lives in markready/src/data and IS committed.
+/pdf_pages/
+
+# Env files anywhere in the repo
+.env*
