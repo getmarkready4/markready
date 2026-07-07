@@ -18,6 +18,10 @@ const CRITERION_KEYS: CriterionKey[] = [
   "grammatical_range_accuracy",
 ];
 
+function normalizeCriterion(s: string): string {
+  return s.toLowerCase().replace(/[^a-z]/g, "");
+}
+
 export function computeBandTrend(subs: SubmissionRow[]): {
   date: string;
   overall: number | null;
@@ -94,7 +98,9 @@ export function computeRecurringWeaknesses(subs: SubmissionRow[]): {
   }
 
   const results = Object.entries(groups).map(([criterion, { rows, band_sum, band_count }]) => {
-    // Collect up to 3 recent issues from all weaknesses in each row.
+    // Collect up to 3 recent issues from weaknesses in each row.
+    // First pass: only weaknesses where criterion matches the group criterion (normalized).
+    // If that yields zero issues, fall back to all weaknesses.
     // Sort rows newest→oldest (descending created_at) internally within the function,
     // then iterate through each row's full weaknesses array in order, collecting unique issues
     // until 3 found. This ensures newest submissions' issues appear first and captures issues
@@ -103,17 +109,39 @@ export function computeRecurringWeaknesses(subs: SubmissionRow[]): {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
+    const normalizedCriterionName = normalizeCriterion(criterion);
+
+    // First pass: filter by matching criterion
     const issues: string[] = [];
     for (const row of sortedRows) {
       if (row.scores && row.scores.weaknesses) {
         for (const weakness of row.scores.weaknesses) {
-          if (weakness.issue && !issues.includes(weakness.issue)) {
+          if (
+            weakness.issue &&
+            !issues.includes(weakness.issue) &&
+            normalizeCriterion(weakness.criterion) === normalizedCriterionName
+          ) {
             issues.push(weakness.issue);
             if (issues.length === 3) break;
           }
         }
       }
       if (issues.length === 3) break;
+    }
+
+    // Fallback: if zero issues found, collect all weaknesses
+    if (issues.length === 0) {
+      for (const row of sortedRows) {
+        if (row.scores && row.scores.weaknesses) {
+          for (const weakness of row.scores.weaknesses) {
+            if (weakness.issue && !issues.includes(weakness.issue)) {
+              issues.push(weakness.issue);
+              if ((issues as Array<string>).length === 3) break;
+            }
+          }
+        }
+        if ((issues as Array<string>).length === 3) break;
+      }
     }
 
     return {

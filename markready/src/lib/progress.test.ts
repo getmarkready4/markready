@@ -11,7 +11,7 @@ function makeScoringResult(
   overallBand: number,
   criteria: Partial<Record<string, number>>,
   weakestCriterion: string,
-  weaknesses: Array<{ issue: string; index: number }>
+  weaknesses: Array<{ issue: string; index: number; criterion?: string }>
 ): ScoringResult {
   const criteriaMap: Partial<Record<CriterionKey, CriterionScore>> = {};
   for (const [key, band] of Object.entries(criteria)) {
@@ -34,7 +34,7 @@ function makeScoringResult(
   for (let i = 0; i < createCount; i++) {
     const providedWeakness = weaknesses.find((w) => w.index === i);
     weaknessesArray.push({
-      criterion: i === 0 ? weakestCriterion : `criterion${i}`,
+      criterion: providedWeakness?.criterion ?? (i === 0 ? weakestCriterion : `criterion${i}`),
       issue: providedWeakness?.issue || `default issue ${i}`,
       quoted_example: `example${i}`,
       explanation: `explanation${i}`,
@@ -48,7 +48,7 @@ function makeScoringResult(
     overall_band: overallBand,
     criteria: criteriaMap,
     weakest_criterion: weakestCriterion as CriterionKey,
-    weaknesses: weaknessesArray as unknown as [Weakness, Weakness, Weakness],
+    weaknesses: weaknessesArray,
     vocabulary_upgrades: [
       { original: "a", upgrade: "b", why: "why" },
       { original: "c", upgrade: "d", why: "why" },
@@ -64,7 +64,7 @@ function makeScoringResult(
       changes_explained: "changes",
     },
     examiner_summary: "summary",
-  };
+  } as ScoringResult;
 }
 
 describe("progress.ts functions", () => {
@@ -298,13 +298,14 @@ describe("progress.ts functions", () => {
     expect(weaknesses[0].timesWeakest).toBe(1);
   });
 
-  // Test 5b: recentIssues from multiple weaknesses, non-chronological input
-  it("collects recentIssues from all weakness entries, newest rows first", () => {
+  // Test 5b: recentIssues from multiple weaknesses, non-chronological input, with criterion filtering
+  it("collects recentIssues from matching-criterion weaknesses, newest rows first", () => {
     // This test verifies that:
     // - Input rows are given in NON-chronological order (newest first in input)
     // - Each row has multiple weakness entries, with issues beyond weaknesses[0]
-    // - recentIssues collects up to 3 unique issues, processing rows newest→oldest,
-    //   iterating through all entries in each row's weaknesses array
+    // - recentIssues collects up to 3 unique issues from weaknesses matching the group criterion,
+    //   processing rows newest→oldest, iterating through all entries in each row's weaknesses array
+    // - The group criterion name ("Coherence & Cohesion") matches weaknesses tagged with key form ("coherence_cohesion")
     const subs: SubmissionRow[] = [
       {
         id: "2",
@@ -316,9 +317,9 @@ describe("progress.ts functions", () => {
           { coherence_cohesion: 6.5 },
           "coherence_cohesion",
           [
-            { issue: "row2 weakness 0", index: 0 },
-            { issue: "row2 weakness 1", index: 1 },
-            { issue: "row2 weakness 2", index: 2 },
+            { issue: "row2 weakness 0", index: 0, criterion: "coherence_cohesion" },
+            { issue: "row2 weakness 1", index: 1, criterion: "coherence_cohesion" },
+            { issue: "row2 weakness 2", index: 2, criterion: "coherence_cohesion" },
           ]
         ),
         overall_band: 6.5,
@@ -334,9 +335,9 @@ describe("progress.ts functions", () => {
           { coherence_cohesion: 6.0 },
           "coherence_cohesion",
           [
-            { issue: "row1 weakness 0", index: 0 },
-            { issue: "row1 weakness 1", index: 1 },
-            { issue: "row1 weakness 2", index: 2 },
+            { issue: "row1 weakness 0", index: 0, criterion: "coherence_cohesion" },
+            { issue: "row1 weakness 1", index: 1, criterion: "coherence_cohesion" },
+            { issue: "row1 weakness 2", index: 2, criterion: "coherence_cohesion" },
           ]
         ),
         overall_band: 6.0,
@@ -352,6 +353,149 @@ describe("progress.ts functions", () => {
     expect(weaknesses[0].recentIssues[0]).toBe("row2 weakness 0");
     expect(weaknesses[0].recentIssues[1]).toBe("row2 weakness 1");
     expect(weaknesses[0].recentIssues[2]).toBe("row2 weakness 2");
+  });
+
+  // Test 5c: Label-form criterion names match key-form group names
+  it("matches label-form criterion strings (Task Response) to key-form group names (task_response)", () => {
+    // The model emits human labels like "Task Response", but the grouping uses snake_case keys.
+    // This test verifies the criterion matching works correctly with both forms.
+    const subs: SubmissionRow[] = [
+      {
+        id: "1",
+        task_type: "TASK2",
+        question: "q",
+        essay: "e",
+        scores: {
+          ...makeScoringResult(
+            6.0,
+            { task_response: 6.0 },
+            "task_response",
+            [{ issue: "issue from task_response", index: 0 }]
+          ),
+          weaknesses: [
+            {
+              issue: "issue from task_response",
+              criterion: "Task Response",  // Label form
+              quoted_example: "example",
+              explanation: "explanation",
+              fix: "fix",
+            },
+          ],
+        } as ScoringResult,
+        overall_band: 6.0,
+        created_at: "2025-01-01T00:00:00Z",
+      },
+    ];
+
+    const weaknesses = computeRecurringWeaknesses(subs);
+    expect(weaknesses).toHaveLength(1);
+    expect(weaknesses[0].criterion).toBe("task_response");
+    expect(weaknesses[0].recentIssues).toHaveLength(1);
+    expect(weaknesses[0].recentIssues[0]).toBe("issue from task_response");
+  });
+
+  // Test 5d: Fallback when criterion-matching yields zero issues
+  it("falls back to all weaknesses when criterion-matching yields zero issues", () => {
+    // 2 submissions, both with weakest_criterion = "lexical_resource",
+    // each carrying 3 weaknesses ALL tagged criterion = "task_response" (mismatch).
+    // First-pass criterion match yields zero; fallback collects all issues.
+    const subs: SubmissionRow[] = [
+      {
+        id: "2",
+        task_type: "TASK2",
+        question: "q",
+        essay: "e",
+        scores: {
+          ...makeScoringResult(
+            6.5,
+            { lexical_resource: 6.5 },
+            "lexical_resource",
+            [
+              { issue: "word1", index: 0 },
+              { issue: "word2", index: 1 },
+              { issue: "word3", index: 2 },
+            ]
+          ),
+          weaknesses: [
+            {
+              issue: "word1",
+              criterion: "task_response",  // Mismatch: group is lexical_resource
+              quoted_example: "example",
+              explanation: "explanation",
+              fix: "fix",
+            },
+            {
+              issue: "word2",
+              criterion: "task_response",
+              quoted_example: "example",
+              explanation: "explanation",
+              fix: "fix",
+            },
+            {
+              issue: "word3",
+              criterion: "task_response",
+              quoted_example: "example",
+              explanation: "explanation",
+              fix: "fix",
+            },
+          ],
+        } as ScoringResult,
+        overall_band: 6.5,
+        created_at: "2025-01-02T00:00:00Z",
+      },
+      {
+        id: "1",
+        task_type: "TASK2",
+        question: "q",
+        essay: "e",
+        scores: {
+          ...makeScoringResult(
+            6.0,
+            { lexical_resource: 6.0 },
+            "lexical_resource",
+            [
+              { issue: "vocab1", index: 0 },
+              { issue: "vocab2", index: 1 },
+              { issue: "vocab3", index: 2 },
+            ]
+          ),
+          weaknesses: [
+            {
+              issue: "vocab1",
+              criterion: "task_response",
+              quoted_example: "example",
+              explanation: "explanation",
+              fix: "fix",
+            },
+            {
+              issue: "vocab2",
+              criterion: "task_response",
+              quoted_example: "example",
+              explanation: "explanation",
+              fix: "fix",
+            },
+            {
+              issue: "vocab3",
+              criterion: "task_response",
+              quoted_example: "example",
+              explanation: "explanation",
+              fix: "fix",
+            },
+          ],
+        } as ScoringResult,
+        overall_band: 6.0,
+        created_at: "2025-01-01T00:00:00Z",
+      },
+    ];
+
+    const weaknesses = computeRecurringWeaknesses(subs);
+    expect(weaknesses).toHaveLength(1);
+    expect(weaknesses[0].criterion).toBe("lexical_resource");
+    // Criterion match yielded zero; fallback collected all 3 unique issues from newest row first
+    expect(weaknesses[0].recentIssues.length).toBe(3);
+    expect(weaknesses[0].recentIssues[0]).toBe("word1");
+    expect(weaknesses[0].recentIssues[1]).toBe("word2");
+    expect(weaknesses[0].recentIssues[2]).toBe("word3");
   });
 
   // Test 6: Rows with null scores are skipped

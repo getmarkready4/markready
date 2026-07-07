@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { TASK_LABELS, CRITERION_LABELS } from "@/types/scoring";
+import { TASK_LABELS, CRITERION_LABELS, type TaskType } from "@/types/scoring";
 import {
   computeBandTrend,
   computeRecurringWeaknesses,
@@ -11,7 +11,10 @@ import type { SubmissionRow } from "@/lib/progress";
 import { BandTrendChart } from "@/components/BandTrendChart";
 import { SignOutButton } from "@/components/SignOutButton";
 
-export default async function DashboardPage() {
+export default async function DashboardPage(props: {
+  searchParams: Promise<{ task?: string }>;
+}) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -21,12 +24,43 @@ export default async function DashboardPage() {
     .from("submissions")
     .select("id, task_type, question, essay, scores, overall_band, created_at")
     .eq("user_id", user.id)
-    .not("scores", "is", null)
     .order("created_at", { ascending: false });
 
-  const submissions = (data ?? []) as SubmissionRow[];
+  const allSubmissions = (data ?? []) as SubmissionRow[];
 
-  if (submissions.length === 0) {
+  // Compute set of task types present
+  const taskTypesPresent = new Set<TaskType>(
+    allSubmissions.map((sub) => sub.task_type as TaskType)
+  );
+
+  // Determine selected task type
+  const taskParam = searchParams.task;
+  const validTaskParam =
+    taskParam && ["TASK2", "TASK1_ACADEMIC", "TASK1_GENERAL"].includes(taskParam)
+      ? (taskParam as TaskType)
+      : null;
+
+  // Find most recent submission for fallback
+  const mostRecentTaskType =
+    allSubmissions.length > 0 ? (allSubmissions[0].task_type as TaskType) : null;
+
+  const selectedTaskType: TaskType | null =
+    validTaskParam && taskTypesPresent.has(validTaskParam)
+      ? validTaskParam
+      : mostRecentTaskType;
+
+  // Filter submissions for analytics (only scored ones)
+  const scoredSubmissions = allSubmissions.filter((sub) => sub.scores !== null);
+
+  // Filter to selected task type for analytics
+  const analyticsSubmissions = selectedTaskType
+    ? scoredSubmissions.filter((sub) => sub.task_type === selectedTaskType)
+    : scoredSubmissions;
+
+  // All submissions list (keep all for history)
+  const allSortedSubmissions = allSubmissions.filter((sub) => sub.scores !== null);
+
+  if (allSortedSubmissions.length === 0) {
     return (
       <div className="min-h-screen bg-[#FAF8F3]">
         {/* Header */}
@@ -63,9 +97,9 @@ export default async function DashboardPage() {
     );
   }
 
-  const trend = computeBandTrend(submissions);
-  const weaknesses = computeRecurringWeaknesses(submissions);
-  const summary = computeSummary(submissions);
+  const trend = computeBandTrend(analyticsSubmissions);
+  const weaknesses = computeRecurringWeaknesses(analyticsSubmissions);
+  const summary = computeSummary(analyticsSubmissions);
 
   const deltaIndicator =
     summary.deltaFromFirst != null
@@ -102,6 +136,30 @@ export default async function DashboardPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-10 space-y-10">
+        {/* Task type tabs (if multiple types present) */}
+        {taskTypesPresent.size > 1 && selectedTaskType && (
+          <div className="space-y-3">
+            <div className="flex gap-1 p-1 bg-[#F2EEE5] rounded-xl flex-wrap">
+              {Array.from(taskTypesPresent).map((taskType) => (
+                <Link
+                  key={taskType}
+                  href={`/dashboard?task=${taskType}`}
+                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    selectedTaskType === taskType
+                      ? "bg-white text-[#23282B] shadow-sm"
+                      : "text-[#5B6266] hover:text-[#23282B]"
+                  }`}
+                >
+                  {TASK_LABELS[taskType]}
+                </Link>
+              ))}
+            </div>
+            <p className="text-xs text-[#5B6266]">
+              Showing stats for {TASK_LABELS[selectedTaskType]}
+            </p>
+          </div>
+        )}
+
         {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="rounded-xl border border-[#E4DFD3] bg-white px-4 py-4 text-center">
@@ -184,7 +242,7 @@ export default async function DashboardPage() {
           <h2 className="font-serif text-lg font-semibold text-[#23282B]">
             Evaluation History
           </h2>
-          {submissions.map((sub) => {
+          {allSortedSubmissions.map((sub) => {
             const date = new Date(sub.created_at).toLocaleDateString("en-US", {
               year: "numeric",
               month: "short",
