@@ -88,7 +88,10 @@ async function downscaleImage(file: File): Promise<string> {
       const canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL("image/jpeg", 0.85));
     };
     img.onerror = reject;
@@ -108,6 +111,7 @@ export default function ScorePage() {
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [imageDataUri, setImageDataUri] = useState<string | null>(null);
+  const [remainingToday, setRemainingToday] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -126,6 +130,7 @@ export default function ScorePage() {
     setResult(null);
     setError(null);
     setImageDataUri(null);
+    setRemainingToday(null);
   }
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -176,6 +181,8 @@ export default function ScorePage() {
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Please try again.");
       } else {
+        const remainingToday = typeof data.remaining_today === "number" ? data.remaining_today : null;
+        setRemainingToday(remainingToday);
         setResult(data);
       }
     } catch {
@@ -248,7 +255,7 @@ export default function ScorePage() {
                   >
                     {SAMPLE_QUESTIONS[taskType].map((q) => (
                       <option key={q.id} value={q.text}>
-                        {q.text.slice(0, 85)}…
+                        {q.text.length > 85 ? q.text.slice(0, 85) + "…" : q.text}
                       </option>
                     ))}
                   </select>
@@ -378,12 +385,19 @@ export default function ScorePage() {
             <ScoreReport result={result} taskType={taskType} />
 
             {/* Score another */}
-            <button
-              onClick={() => { setResult(null); setError(null); setEssay(""); setImageDataUri(null); }}
-              className="w-full py-4 rounded-xl border border-[#E4DFD3] bg-white text-[#23282B] font-semibold text-sm hover:border-[#1F5C4E] transition-colors"
-            >
-              Score another essay
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => { setResult(null); setError(null); setEssay(""); setImageDataUri(null); setRemainingToday(null); }}
+                className="w-full py-4 rounded-xl border border-[#E4DFD3] bg-white text-[#23282B] font-semibold text-sm hover:border-[#1F5C4E] transition-colors"
+              >
+                Score another essay
+              </button>
+              {remainingToday !== null && remainingToday <= 3 && (
+                <p className="text-xs text-[#5B6266] text-center">
+                  {remainingToday} evaluation{remainingToday === 1 ? "" : "s"} left today — resets at midnight UTC.
+                </p>
+              )}
+            </div>
           </div>
         )}
       </main>
