@@ -6,6 +6,9 @@ export async function proxy(request: NextRequest) {
     if (request.nextUrl.pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
     }
+    if (request.nextUrl.pathname.startsWith("/login")) {
+      return NextResponse.next({ request });
+    }
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -40,6 +43,10 @@ export async function proxy(request: NextRequest) {
     ) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
+  } else {
+    if (request.nextUrl.pathname.startsWith("/login")) {
+      return NextResponse.redirect(new URL("/score", request.url));
+    }
   }
 
   return supabaseResponse;
@@ -47,6 +54,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/login",
+    "/login/:path*",
     "/score",
     "/score/:path*",
     "/dashboard",
