@@ -42,14 +42,8 @@ export interface ScoringResult {
   overall_band: number;
   criteria: Partial<Record<CriterionKey, CriterionScore>>;
   weakest_criterion: CriterionKey;
-  weaknesses: [Weakness, Weakness, Weakness];
-  vocabulary_upgrades: [
-    VocabUpgrade,
-    VocabUpgrade,
-    VocabUpgrade,
-    VocabUpgrade,
-    VocabUpgrade,
-  ];
+  weaknesses: Weakness[];
+  vocabulary_upgrades: VocabUpgrade[];
   model_paragraph: ModelParagraph;
   examiner_summary: string;
   // Task 1 extras
