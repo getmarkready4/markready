@@ -6,7 +6,8 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
-  const type = searchParams.get("type") as "magiclink" | "email" | null;
+  const rawType = searchParams.get("type");
+  const type = rawType === "magiclink" || rawType === "email" ? rawType : null;
   const cookieStore = await cookies();
 
   const supabase = createServerClient(
