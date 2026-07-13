@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -191,6 +192,23 @@ function LoginForm() {
           )}
         </div>
       </div>
+
+      <footer className="mt-8 max-w-sm text-center space-y-2">
+        <div className="text-sm text-[#5B6266]">
+          <Link href="/terms" className="hover:text-[#23282B] underline">
+            Terms
+          </Link>
+          <span className="mx-2">·</span>
+          <Link href="/privacy" className="hover:text-[#23282B] underline">
+            Privacy
+          </Link>
+        </div>
+        <p className="text-xs text-[#9BA3A8] leading-relaxed">
+          Scores are AI-generated estimates, not official results. IELTS™ is a registered
+          trademark of the British Council, IDP: IELTS Australia and Cambridge University
+          Press &amp; Assessment. MarkReady is not affiliated with or endorsed by them.
+        </p>
+      </footer>
     </div>
   );
 }
