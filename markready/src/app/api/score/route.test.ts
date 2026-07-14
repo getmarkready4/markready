@@ -256,6 +256,23 @@ describe("POST /api/score", () => {
       expect(testContext.deletedIds).toContain("ph-1");
     });
 
+    it("returns 422 without retry or storage when model reports scorable:false", async () => {
+      // WHY: a wrong-task-type refusal is a user mistake, not a score — it must not be
+      // stored (dashboard pollution), must not consume quota, and must not retry
+      mockCreate.mockResolvedValue({
+        choices: [{ message: { content: JSON.stringify({ scorable: false, detected_task: "TASK2", reason: "This is a Task 2 essay, not a letter." }) }, finish_reason: "stop" }],
+      });
+      const req = createRequest({ question: "Write a letter…", essay: "Some people think… Discuss both views.", taskType: "TASK1_GENERAL" });
+      const res = await POST(req);
+      expect(res.status).toBe(422);
+      const data = await res.json() as Record<string, unknown>;
+      expect(data.error).toBe("unscorable");
+      expect(data.detectedTask).toBe("TASK2");
+      expect(mockCreate).toHaveBeenCalledTimes(1); // no retry
+      expect(testContext.deletedIds).toContain("ph-1"); // placeholder removed
+      expect(testContext.updatePayloads).toEqual([]); // no score written
+    });
+
     it("returns 200 when first response has finish_reason='length', second is valid", async () => {
       // WHY: truncation must consume an attempt, not poison the request
       const valid = validScoringJson();

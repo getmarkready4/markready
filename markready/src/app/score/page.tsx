@@ -127,6 +127,7 @@ export default function ScorePage() {
     setTaskType(t);
     setQuestion(SAMPLE_QUESTIONS[t][0].text);
     setCustomQuestion(false);
+    setEssay("");
     setResult(null);
     setError(null);
     setImageDataUri(null);
@@ -178,6 +179,18 @@ export default function ScorePage() {
         return;
       }
       const data = await res.json();
+      if (res.status === 422) {
+        // Wrong task type for the selected rubric — not scored, quota untouched
+        const tabLabel = TASK_TABS.find((t) => t.type === data.detectedTask)?.label;
+        setError(
+          `${data.reason ?? "This response doesn't match the selected task."}${
+            tabLabel
+              ? ` Switch to the “${tabLabel}” tab and try again.`
+              : " Check the task tab above and try again."
+          }`
+        );
+        return;
+      }
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Please try again.");
       } else {

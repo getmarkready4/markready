@@ -9,7 +9,7 @@ import {
 import type { ScoringResult, TaskType } from "@/types/scoring";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { parseScoringResult } from "@/lib/parse-scoring";
+import { parseScoringResult, extractJson } from "@/lib/parse-scoring";
 
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -77,6 +77,31 @@ async function callModel(
   }
 
   return completion.choices[0]?.message?.content ?? "";
+}
+
+type Unscorable = { reason: string; detectedTask?: string };
+
+// The model returns { "scorable": false, ... } when the candidate response is a
+// different task type than the selected rubric (e.g. a Task 2 essay submitted for
+// letter scoring). These are user mistakes, not scores — the route must NOT store
+// them or consume the daily quota, and must not retry (the verdict is deterministic).
+function detectUnscorable(raw: string): Unscorable | null {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(extractJson(raw));
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== "object") return null;
+  const o = obj as Record<string, unknown>;
+  if (o.scorable !== false) return null;
+  return {
+    reason:
+      typeof o.reason === "string" && o.reason.trim()
+        ? o.reason.trim()
+        : "This response doesn't match the selected task type.",
+    detectedTask: typeof o.detected_task === "string" ? o.detected_task : undefined,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -263,9 +288,10 @@ export async function POST(req: NextRequest) {
 
   // Step 6 — Call model with retry loop
   let result: ScoringResult | null = null;
+  let unscorable: Unscorable | null = null;
   let lastFailure: "api" | "parse" = "api";
 
-  for (let attempt = 0; attempt < 2 && !result; attempt++) {
+  for (let attempt = 0; attempt < 2 && !result && !unscorable; attempt++) {
     let raw: string;
     try {
       raw = await callModel(effectiveSystemPrompt, userContent, activeModel);
@@ -275,11 +301,30 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
+    // Wrong task type for this rubric — deterministic refusal, no retry
+    unscorable = detectUnscorable(raw);
+    if (unscorable) break;
+
     result = parseScoringResult(raw);
     if (!result) {
       console.error(`Attempt ${attempt + 1} parse/validation failed. Raw:`, raw);
       lastFailure = "parse";
     }
+  }
+
+  // Unscorable — delete placeholder, store no band, consume no quota
+  if (unscorable) {
+    const { error: deleteError } = await serviceClient
+      .from("submissions")
+      .delete()
+      .eq("id", placeholderId);
+    if (deleteError) {
+      console.error("Placeholder delete failed:", deleteError.message);
+    }
+    return NextResponse.json(
+      { error: "unscorable", reason: unscorable.reason, detectedTask: unscorable.detectedTask },
+      { status: 422 }
+    );
   }
 
   if (!result) {
