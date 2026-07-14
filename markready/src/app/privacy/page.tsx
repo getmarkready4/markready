@@ -134,13 +134,8 @@ export default function PrivacyPage() {
           <section>
             <h2 className="font-serif text-xl font-semibold mb-2">9. Contact</h2>
             <p>
-              Privacy questions or data requests:{" "}
-              <a
-                href="mailto:albertchang011@gmail.com"
-                className="text-[#1F5C4E] underline hover:text-[#154136]"
-              >
-                albertchang011@gmail.com
-              </a>
+              Privacy questions or data requests? Use the feedback link inside the app after
+              signing in.
             </p>
           </section>
         </div>

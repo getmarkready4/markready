@@ -130,13 +130,8 @@ export default function TermsPage() {
           <section>
             <h2 className="font-serif text-xl font-semibold mb-2">10. Contact</h2>
             <p>
-              Questions about these terms:{" "}
-              <a
-                href="mailto:albertchang011@gmail.com"
-                className="text-[#1F5C4E] underline hover:text-[#154136]"
-              >
-                albertchang011@gmail.com
-              </a>
+              Questions about these terms? Use the feedback link inside the app after signing
+              in.
             </p>
           </section>
         </div>
