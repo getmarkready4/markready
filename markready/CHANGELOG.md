@@ -7,6 +7,22 @@ and this project uses [Semantic Versioning](https://semver.org/). While the app
 is pre-1.0, minor versions (0.x.0) group feature work and patch versions (0.x.y)
 cover fixes.
 
+## [0.5.0] — 2026-07-15
+
+### Added
+- **Practice streak** on the dashboard — consecutive UTC days with at least one
+  scored submission, with a nudge to keep it alive.
+- **Target band goal** — set a band you're aiming for and track progress toward
+  it against your best score. Stored on `profiles.target_band` (migration 0002);
+  writes go through the new `/api/target-band` route (service-role, auth-gated).
+- **Weakness-focused post-score CTA** — the score report now ends with a "your
+  fastest win" summary and a primary "Practice again — focus on {criterion}"
+  action that carries a focus reminder into the next attempt.
+
+### Developer tooling
+- Supabase MCP server config (`.mcp.json`, read-only, project-scoped) and the
+  official Supabase agent skills (`supabase`, `supabase-postgres-best-practices`).
+
 ## [0.4.0] — 2026-07-15
 
 ### Added
@@ -70,6 +86,7 @@ cover fixes.
   rewrite), Supabase auth, and a progress dashboard.
 - Calibration corpus and extraction scripts for Cambridge IELTS sample answers.
 
+[0.5.0]: https://github.com/Albertc11/markready/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Albertc11/markready/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Albertc11/markready/releases/tag/v0.3.0
 [0.2.1]: https://github.com/Albertc11/markready/releases/tag/v0.2.1
