@@ -6,9 +6,11 @@ import {
   computeBandTrend,
   computeRecurringWeaknesses,
   computeSummary,
+  computeStreak,
 } from "@/lib/progress";
 import type { SubmissionRow } from "@/lib/progress";
 import { BandTrendChart } from "@/components/BandTrendChart";
+import { GoalCard } from "@/components/GoalCard";
 import { SignOutButton } from "@/components/SignOutButton";
 
 export default async function DashboardPage(props: {
@@ -101,6 +103,28 @@ export default async function DashboardPage(props: {
   const weaknesses = computeRecurringWeaknesses(analyticsSubmissions);
   const summary = computeSummary(analyticsSubmissions);
 
+  // Streak spans all task types (a global practice habit, not per-rubric).
+  const streak = computeStreak(scoredSubmissions);
+
+  // Goal tracks the best band across every task type.
+  let globalBest: number | null = null;
+  for (const sub of scoredSubmissions) {
+    if (sub.overall_band !== null && (globalBest === null || sub.overall_band > globalBest)) {
+      globalBest = sub.overall_band;
+    }
+  }
+
+  // target_band may not exist yet (migration 0002) — tolerate the error.
+  let targetBand: number | null = null;
+  const { data: profileRow } = await supabase
+    .from("profiles")
+    .select("target_band")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileRow && typeof profileRow.target_band === "number") {
+    targetBand = profileRow.target_band;
+  }
+
   const deltaIndicator =
     summary.deltaFromFirst != null
       ? summary.deltaFromFirst > 0
@@ -136,6 +160,23 @@ export default async function DashboardPage(props: {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-10 space-y-10">
+        {/* Streak */}
+        {streak.current > 0 && (
+          <div className="flex items-center gap-3 rounded-2xl border border-[#E4DFD3] bg-white px-6 py-4">
+            <span className="text-2xl leading-none">🔥</span>
+            <div>
+              <p className="font-serif text-xl font-semibold text-[#23282B]">
+                {streak.current}-day streak
+              </p>
+              <p className="text-xs text-[#5B6266]">
+                {streak.activeToday
+                  ? "You've practised today — keep it going tomorrow."
+                  : "Score an essay today to keep your streak alive."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Task type tabs (if multiple types present) */}
         {taskTypesPresent.size > 1 && selectedTaskType && (
           <div className="space-y-3">
@@ -192,6 +233,9 @@ export default async function DashboardPage(props: {
             </p>
           </div>
         </div>
+
+        {/* Goal */}
+        <GoalCard target={targetBand} best={globalBest} />
 
         {/* Trend chart */}
         {trend.length > 0 && (

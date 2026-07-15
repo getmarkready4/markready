@@ -158,6 +158,43 @@ export function computeRecurringWeaknesses(subs: SubmissionRow[]): {
   return results;
 }
 
+// Current practice streak: consecutive UTC days (ending today or yesterday)
+// with at least one scored submission. If the most recent activity is older
+// than yesterday, the streak has lapsed and is 0.
+export function computeStreak(subs: SubmissionRow[]): {
+  current: number;
+  activeToday: boolean;
+} {
+  const utcDay = (iso: string): number => {
+    const d = new Date(iso);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  };
+  const MS_PER_DAY = 86_400_000;
+
+  const days = new Set<number>();
+  for (const sub of subs) {
+    if (sub.scores !== null) days.add(utcDay(sub.created_at));
+  }
+  if (days.size === 0) return { current: 0, activeToday: false };
+
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const activeToday = days.has(today);
+
+  // Anchor the streak at today if practised today, otherwise yesterday.
+  let cursor: number;
+  if (activeToday) cursor = today;
+  else if (days.has(today - MS_PER_DAY)) cursor = today - MS_PER_DAY;
+  else return { current: 0, activeToday: false };
+
+  let current = 0;
+  while (days.has(cursor)) {
+    current += 1;
+    cursor -= MS_PER_DAY;
+  }
+  return { current, activeToday };
+}
+
 export function computeSummary(subs: SubmissionRow[]): {
   total: number;
   latestOverall: number | null;

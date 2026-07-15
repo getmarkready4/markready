@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import type { ScoringResult, TaskType } from "@/types/scoring";
-import { MIN_WORDS } from "@/types/scoring";
+import type { ScoringResult, TaskType, CriterionKey } from "@/types/scoring";
+import { MIN_WORDS, CRITERION_LABELS } from "@/types/scoring";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ScoreReport } from "@/components/ScoreReport";
@@ -112,6 +112,7 @@ export default function ScorePage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [imageDataUri, setImageDataUri] = useState<string | null>(null);
   const [remainingToday, setRemainingToday] = useState<number | null>(null);
+  const [focusTip, setFocusTip] = useState<{ label: string; fix: string } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -132,6 +133,7 @@ export default function ScorePage() {
     setError(null);
     setImageDataUri(null);
     setRemainingToday(null);
+    setFocusTip(null);
   }
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -234,6 +236,27 @@ export default function ScorePage() {
                 Examiner-level feedback in under 15 seconds.
               </p>
             </div>
+
+            {focusTip && (
+              <div className="rounded-xl border border-[#1F5C4E]/25 bg-[#E7EFEC] px-4 py-3 flex items-start gap-3">
+                <span className="text-lg leading-none mt-0.5">🎯</span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#1F5C4E]">
+                    This round, focus on {focusTip.label}
+                  </p>
+                  <p className="text-xs text-[#23282B] mt-0.5 leading-relaxed">
+                    {focusTip.fix}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setFocusTip(null)}
+                  className="text-[#5B6266] hover:text-[#23282B] text-lg leading-none"
+                  aria-label="Dismiss focus tip"
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
             {/* Task type tabs */}
             <div className="flex gap-1 p-1 bg-[#F2EEE5] rounded-xl">
@@ -400,18 +423,57 @@ export default function ScorePage() {
         )}
 
         {/* Results */}
-        {result && !loading && (
+        {result && !loading && (() => {
+          const weakestLabel =
+            CRITERION_LABELS[result.weakest_criterion as CriterionKey] ??
+            "your weakest area";
+          const topFix = result.weaknesses[0]?.fix ?? "";
+          const startNext = (focus: boolean) => {
+            setResult(null);
+            setError(null);
+            setEssay("");
+            setImageDataUri(null);
+            setRemainingToday(null);
+            setFocusTip(focus && topFix ? { label: weakestLabel, fix: topFix } : null);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          };
+          return (
           <div className="space-y-8">
             <ScoreReport result={result} taskType={taskType} />
 
-            {/* Score another */}
+            {/* Next step — turn the report into an action */}
             <div className="space-y-3">
+              {topFix && (
+                <div className="rounded-2xl border border-[#1F5C4E]/20 bg-white px-6 py-5 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#C97B4A]">
+                    Your fastest win
+                  </p>
+                  <p className="mt-1 text-sm text-[#23282B] leading-relaxed">
+                    Your weakest area is <span className="font-semibold text-[#1F5C4E]">{weakestLabel}</span>. {topFix}
+                  </p>
+                </div>
+              )}
               <button
-                onClick={() => { setResult(null); setError(null); setEssay(""); setImageDataUri(null); setRemainingToday(null); }}
-                className="w-full py-4 rounded-xl border border-[#E4DFD3] bg-white text-[#23282B] font-semibold text-sm hover:border-[#1F5C4E] transition-colors"
+                onClick={() => startNext(true)}
+                className="w-full py-4 rounded-xl bg-[#1F5C4E] text-white font-semibold text-sm hover:bg-[#154136] transition-colors"
               >
-                Score another essay
+                Practice again — focus on {weakestLabel}
               </button>
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={() => startNext(false)}
+                  className="text-sm text-[#5B6266] hover:text-[#23282B] hover:underline"
+                >
+                  Score a different essay
+                </button>
+                <span className="text-[#E4DFD3]">·</span>
+                <Link
+                  href="/dashboard"
+                  className="text-sm text-[#1F5C4E] hover:text-[#154136] hover:underline"
+                >
+                  See my progress
+                </Link>
+              </div>
               {remainingToday !== null && remainingToday <= 3 && (
                 <p className="text-xs text-[#5B6266] text-center">
                   {remainingToday} evaluation{remainingToday === 1 ? "" : "s"} left today — resets at midnight UTC.
@@ -419,7 +481,8 @@ export default function ScorePage() {
               )}
             </div>
           </div>
-        )}
+          );
+        })()}
       </main>
     </div>
   );

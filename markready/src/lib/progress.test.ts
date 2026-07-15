@@ -3,6 +3,7 @@ import {
   computeBandTrend,
   computeRecurringWeaknesses,
   computeSummary,
+  computeStreak,
 } from "./progress";
 import type { SubmissionRow } from "./progress";
 import type { ScoringResult, CriterionKey, CriterionScore, Weakness } from "@/types/scoring";
@@ -542,5 +543,61 @@ describe("progress.ts functions", () => {
     expect(trend).toHaveLength(1);
     expect(weaknesses).toHaveLength(1);
     expect(summary.total).toBe(1);
+  });
+});
+
+describe("computeStreak", () => {
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  // Noon UTC keeps each row squarely inside its intended UTC day.
+  const dayISO = (offset: number): string =>
+    new Date(todayUTC - offset * 86_400_000 + 12 * 3_600_000).toISOString();
+  const row = (id: string, offset: number, scored = true): SubmissionRow => ({
+    id,
+    task_type: "TASK2",
+    question: "q",
+    essay: "e",
+    scores: scored ? ({} as ScoringResult) : null,
+    overall_band: scored ? 6 : null,
+    created_at: dayISO(offset),
+  });
+
+  it("returns 0 for no submissions", () => {
+    expect(computeStreak([])).toEqual({ current: 0, activeToday: false });
+  });
+
+  it("counts consecutive days ending today", () => {
+    // WHY: a live streak must include today and every unbroken prior day
+    const r = computeStreak([row("a", 0), row("b", 1), row("c", 2)]);
+    expect(r).toEqual({ current: 3, activeToday: true });
+  });
+
+  it("keeps yesterday's streak alive but flags not-active-today", () => {
+    // WHY: missing today shouldn't break the streak until the day ends — the
+    // user can still save it; the UI needs to nudge them (activeToday=false)
+    const r = computeStreak([row("a", 1), row("b", 2)]);
+    expect(r).toEqual({ current: 2, activeToday: false });
+  });
+
+  it("resets to 0 once a full day is missed", () => {
+    // WHY: last practice two days ago means the streak has genuinely lapsed
+    expect(computeStreak([row("a", 2), row("b", 3)])).toEqual({
+      current: 0,
+      activeToday: false,
+    });
+  });
+
+  it("counts a day once even with multiple submissions", () => {
+    // WHY: streak is days practised, not essays scored
+    const r = computeStreak([row("a", 0), row("b", 0), row("c", 1)]);
+    expect(r).toEqual({ current: 2, activeToday: true });
+  });
+
+  it("ignores unscored placeholder rows", () => {
+    // WHY: an in-flight placeholder (null scores) is not a completed practice —
+    // today's placeholder must not count (activeToday=false), but yesterday's
+    // real submission still keeps a 1-day streak alive.
+    const r = computeStreak([row("a", 0, false), row("b", 1)]);
+    expect(r).toEqual({ current: 1, activeToday: false });
   });
 });
