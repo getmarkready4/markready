@@ -252,7 +252,14 @@ export default function ScorePage() {
               ))}
             </div>
 
-            <p className="text-xs text-[#5B6266] -mt-4">{TASK_DESCRIPTIONS[taskType]}</p>
+            <div className="-mt-4 space-y-1">
+              <p className="text-xs text-[#5B6266]">{TASK_DESCRIPTIONS[taskType]}</p>
+              <p className="text-xs text-[#9BA3A8]">
+                <span className="font-medium text-[#5B6266]">Not sure which?</span>{" "}
+                Task 2 = opinion essay · Task 1 Academic = describe a chart or graph ·
+                Task 1 General = write a letter.
+              </p>
+            </div>
 
             {/* Question */}
             <div className="space-y-2">
