@@ -9,46 +9,55 @@ import { useRouter } from "next/navigation";
 import { ScoreReport } from "@/components/ScoreReport";
 import { SignOutButton } from "@/components/SignOutButton";
 
-const SAMPLE_QUESTIONS: Record<TaskType, { id: string; text: string }[]> = {
+const SAMPLE_QUESTIONS: Record<TaskType, { id: string; label: string; text: string }[]> = {
   TASK2: [
     {
       id: "crime",
+      label: "Crime & prison sentences",
       text: "Some people think that the best way to reduce crime is to give longer prison sentences. Others, however, believe there are better alternative ways of reducing crime. Discuss both views and give your own opinion.",
     },
     {
       id: "technology",
+      label: "Technology & simpler living",
       text: "Some people believe that technology has made our lives more complex, and the solution is to lead simpler lives without modern technology. To what extent do you agree or disagree?",
     },
     {
       id: "education",
+      label: "Women in the workforce",
       text: "In many countries, the traditional family model has changed, with women now forming a large part of the workforce. What are the advantages and disadvantages of this change?",
     },
     {
       id: "environment",
+      label: "Population & the environment",
       text: "The increasing population is putting pressure on natural resources and the environment. What are the causes of this problem and what measures can be taken to address it?",
     },
   ],
   TASK1_ACADEMIC: [
     {
       id: "museum",
+      label: "Museum visitor numbers (table)",
       text: "The table below shows the numbers of visitors to Ashdown Museum during the year before and the year after it was refurbished. The charts show the result of surveys asking visitors how satisfied they were with their visit. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
     },
     {
       id: "co2",
+      label: "CO2 emissions by country (graph)",
       text: "The graph below shows the changes in the emission of carbon dioxide in four European countries between 1967 and 2007. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
     },
     {
       id: "water",
+      label: "Water usage by region (diagram)",
       text: "The diagrams below show the percentage of water used for different purposes in six areas of the world. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
     },
   ],
   TASK1_GENERAL: [
     {
       id: "neighbour",
+      label: "Letter to a new neighbour",
       text: "You have recently moved to a new area. Write a letter to your new neighbour. In your letter: introduce yourself, describe the area you have moved from, invite your neighbour to visit you.",
     },
     {
       id: "complaint",
+      label: "Complaint letter about equipment",
       text: "You recently bought a piece of equipment for your home but it did not work. Write a letter to the shop manager. In your letter: describe what you bought, explain the problem, say what you want the manager to do.",
     },
   ],
@@ -235,6 +244,11 @@ export default function ScorePage() {
               <p className="text-[#5B6266]">
                 Examiner-level feedback in under 15 seconds.
               </p>
+              <p className="text-sm text-[#5B6266] mt-2 leading-relaxed">
+                Pick a task type below, choose or paste a question, then paste your
+                written response and hit Score. You&apos;ll get an estimated band for
+                each of the four IELTS criteria, specific fixes, and a Band 8 rewrite.
+              </p>
             </div>
 
             {focusTip && (
@@ -289,42 +303,38 @@ export default function ScorePage() {
               <label className="text-sm font-medium text-[#23282B]">
                 {taskType === "TASK1_GENERAL" ? "Letter prompt" : "Question / prompt"}
               </label>
+              <select
+                className="w-full border border-[#E4DFD3] rounded-xl px-4 py-3 text-sm bg-white text-[#23282B] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30"
+                value={customQuestion ? "__custom__" : question}
+                onChange={(e) => {
+                  if (e.target.value === "__custom__") {
+                    setCustomQuestion(true);
+                    setQuestion("");
+                  } else {
+                    setCustomQuestion(false);
+                    setQuestion(e.target.value);
+                  }
+                }}
+              >
+                {SAMPLE_QUESTIONS[taskType].map((q) => (
+                  <option key={q.id} value={q.text}>
+                    {q.label}
+                  </option>
+                ))}
+                <option value="__custom__">Use my own question</option>
+              </select>
               {!customQuestion ? (
-                <>
-                  <select
-                    className="w-full border border-[#E4DFD3] rounded-xl px-4 py-3 text-sm bg-white text-[#23282B] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30"
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                  >
-                    {SAMPLE_QUESTIONS[taskType].map((q) => (
-                      <option key={q.id} value={q.text}>
-                        {q.text.length > 85 ? q.text.slice(0, 85) + "…" : q.text}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="text-xs text-[#1F5C4E] hover:underline"
-                    onClick={() => { setCustomQuestion(true); setQuestion(""); }}
-                  >
-                    Use my own question instead
-                  </button>
-                </>
+                <p className="text-sm text-[#23282B] bg-white border border-[#E4DFD3] rounded-xl px-4 py-3 leading-relaxed">
+                  {question}
+                </p>
               ) : (
-                <>
-                  <textarea
-                    className="w-full border border-[#E4DFD3] rounded-xl px-4 py-3 text-sm bg-white text-[#23282B] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 resize-none"
-                    rows={4}
-                    placeholder="Paste your question or prompt here…"
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                  />
-                  <button
-                    className="text-xs text-[#5B6266] hover:underline"
-                    onClick={() => { setCustomQuestion(false); setQuestion(SAMPLE_QUESTIONS[taskType][0].text); }}
-                  >
-                    Use a sample question instead
-                  </button>
-                </>
+                <textarea
+                  className="w-full border border-[#E4DFD3] rounded-xl px-4 py-3 text-sm bg-white text-[#23282B] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 resize-none"
+                  rows={4}
+                  placeholder="Paste your question or prompt here…"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                />
               )}
             </div>
 
