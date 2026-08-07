@@ -10,6 +10,14 @@ import type { ScoringResult, TaskType } from "@/types/scoring";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseScoringResult, extractJson } from "@/lib/parse-scoring";
+import { countUsedTests, isCohort, FREE_TEST_LIMIT, type Cohort } from "@/lib/quota";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/** Releases the quota slot held by an in-flight submission. Never throws. */
+async function deletePlaceholder(service: SupabaseClient, id: string) {
+  const { error } = await service.from("submissions").delete().eq("id", id);
+  if (error) console.error("Placeholder delete failed:", error.message);
+}
 
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -112,10 +120,10 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Step 2 — Ban check
+  // Step 2 — Ban, cohort, and onboarding checks
   const { data: profile, error: profileError } = await serviceClient
     .from("profiles")
-    .select("banned_at")
+    .select("banned_at, cohort, referral_source")
     .eq("id", user.id)
     .maybeSingle();
   if (profileError) {
@@ -123,6 +131,21 @@ export async function POST(req: NextRequest) {
   }
   if (profile?.banned_at) {
     return NextResponse.json({ error: "Account suspended" }, { status: 403 });
+  }
+
+  const cohort: Cohort = isCohort(profile?.cohort) ? profile.cohort : "waitlist";
+
+  if (cohort === "waitlist") {
+    return NextResponse.json(
+      { error: "You're on the waitlist", code: "waitlist" },
+      { status: 403 }
+    );
+  }
+  if (cohort !== "staff" && !profile?.referral_source) {
+    return NextResponse.json(
+      { error: "Tell us how you found us first", code: "onboarding_incomplete" },
+      { status: 403 }
+    );
   }
 
   // Step 3 — Parse and validate body
@@ -239,32 +262,29 @@ export async function POST(req: NextRequest) {
 
   const placeholderId = placeholder.id;
 
-  // Step 5 — Daily cap check (10/day, resets at UTC midnight)
-  // Count query excludes stale null-score placeholders (>5 min old)
-  const utcMidnight = new Date();
-  utcMidnight.setUTCHours(0, 0, 0, 0);
-  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  // Step 5 — Lifetime free-test quota (founding cohort only; staff unlimited).
+  // The count includes the placeholder just inserted, hence `>` not `>=`.
+  let count: number | null = null;
 
-  const { count } = await serviceClient
-    .from("submissions")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("created_at", utcMidnight.toISOString())
-    .or(`scores.not.is.null,created_at.gte.${fiveMinAgo}`);
+  if (cohort !== "staff") {
+    count = await countUsedTests(serviceClient, user.id);
 
-  if ((count ?? 0) > 10) {
-    // Delete placeholder and reject
-    const { error: deleteError } = await serviceClient
-      .from("submissions")
-      .delete()
-      .eq("id", placeholderId);
-    if (deleteError) {
-      console.error("Placeholder delete failed:", deleteError.message);
+    if (count === null) {
+      await deletePlaceholder(serviceClient, placeholderId);
+      return NextResponse.json({ error: "Unable to verify your usage" }, { status: 500 });
     }
-    return NextResponse.json(
-      { error: "Daily limit reached", reset: "midnight UTC" },
-      { status: 429 }
-    );
+
+    if (count > FREE_TEST_LIMIT) {
+      await deletePlaceholder(serviceClient, placeholderId);
+      return NextResponse.json(
+        {
+          error: "You've used both free tests",
+          code: "quota_exhausted",
+          limit: FREE_TEST_LIMIT,
+        },
+        { status: 403 }
+      );
+    }
   }
 
   const systemPrompt = SYSTEM_PROMPTS[resolvedTaskType];
@@ -372,8 +392,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to save submission" }, { status: 500 });
   }
 
-  // Return result with remaining_today
-  const remaining_today = Math.max(0, 10 - (count ?? 0));
+  // Free tests left after this one. `count` already includes this submission;
+  // null means staff (unlimited).
+  const remaining =
+    cohort === "staff" ? null : Math.max(0, FREE_TEST_LIMIT - (count ?? 0));
 
-  return NextResponse.json({ ...result, remaining_today });
+  return NextResponse.json({ ...result, remaining });
 }

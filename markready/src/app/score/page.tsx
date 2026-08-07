@@ -120,7 +120,8 @@ export default function ScorePage() {
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [imageDataUri, setImageDataUri] = useState<string | null>(null);
-  const [remainingToday, setRemainingToday] = useState<number | null>(null);
+  // Free tests left in the founding-cohort allowance. null = staff (unlimited).
+  const [remainingTests, setRemainingTests] = useState<number | null>(null);
   const [focusTip, setFocusTip] = useState<{ label: string; fix: string } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -141,7 +142,7 @@ export default function ScorePage() {
     setResult(null);
     setError(null);
     setImageDataUri(null);
-    setRemainingToday(null);
+    setRemainingTests(null);
     setFocusTip(null);
   }
 
@@ -181,15 +182,28 @@ export default function ScorePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, essay, taskType, image: taskType === "TASK1_ACADEMIC" ? imageDataUri : null }),
       });
-      if (res.status === 429) {
-        setError("You've reached today's limit of 10 evaluations. Resets at midnight UTC.");
-        return;
-      }
       if (res.status === 401) {
         router.push("/login");
         return;
       }
       const data = await res.json();
+      if (res.status === 403) {
+        // Cohort and quota gates — the destination page explains each case.
+        if (data.code === "quota_exhausted") {
+          router.push("/upgrade");
+          return;
+        }
+        if (data.code === "waitlist") {
+          router.push("/waitlist");
+          return;
+        }
+        if (data.code === "onboarding_incomplete") {
+          router.push("/welcome");
+          return;
+        }
+        setError(data.error ?? "You don't have access to scoring right now.");
+        return;
+      }
       if (res.status === 422) {
         // Wrong task type for the selected rubric — not scored, quota untouched
         const tabLabel = TASK_TABS.find((t) => t.type === data.detectedTask)?.label;
@@ -205,8 +219,8 @@ export default function ScorePage() {
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Please try again.");
       } else {
-        const remainingToday = typeof data.remaining_today === "number" ? data.remaining_today : null;
-        setRemainingToday(remainingToday);
+        const remaining = typeof data.remaining === "number" ? data.remaining : null;
+        setRemainingTests(remaining);
         setResult(data);
       }
     } catch {
@@ -443,7 +457,7 @@ export default function ScorePage() {
             setError(null);
             setEssay("");
             setImageDataUri(null);
-            setRemainingToday(null);
+            setRemainingTests(null);
             setFocusTip(focus && topFix ? { label: weakestLabel, fix: topFix } : null);
             window.scrollTo({ top: 0, behavior: "smooth" });
           };
@@ -484,9 +498,11 @@ export default function ScorePage() {
                   See my progress
                 </Link>
               </div>
-              {remainingToday !== null && remainingToday <= 3 && (
+              {remainingTests !== null && (
                 <p className="text-xs text-[#5B6266] text-center">
-                  {remainingToday} evaluation{remainingToday === 1 ? "" : "s"} left today — resets at midnight UTC.
+                  {remainingTests === 0
+                    ? "That was your last free test."
+                    : `${remainingTests} free test${remainingTests === 1 ? "" : "s"} left.`}
                 </p>
               )}
             </div>

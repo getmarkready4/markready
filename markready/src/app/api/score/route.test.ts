@@ -21,7 +21,10 @@ vi.mock("@/lib/supabase/server", () => ({
 let testContext = {
   isBanned: false,
   profileError: false,
-  dailyCount: 0,
+  // Lifetime tests already consumed (successful scores + in-flight placeholders)
+  usedCount: 0,
+  cohort: "founding" as string | null,
+  referralSource: "reddit" as string | null,
   deletedIds: [] as string[],
   updatePayloads: [] as unknown[],
   isDeleting: false, // Track if we're in a delete() call
@@ -74,7 +77,7 @@ vi.mock("@/lib/supabase/service", () => ({
       } as ChainMethod),
       then: async function (this: Record<string, unknown>, resolve: (value: unknown) => void) {
         // For count queries
-        resolve({ count: testContext.dailyCount });
+        resolve({ count: testContext.usedCount, error: null });
       } as ChainMethod,
     };
     return {
@@ -88,9 +91,23 @@ vi.mock("@/lib/supabase/service", () => ({
                     return { data: null, error: { message: "db error" } };
                   }
                   if (testContext.isBanned) {
-                    return { data: { banned_at: "2026-07-01" }, error: null };
+                    return {
+                      data: {
+                        banned_at: "2026-07-01",
+                        cohort: testContext.cohort,
+                        referral_source: testContext.referralSource,
+                      },
+                      error: null,
+                    };
                   }
-                  return { data: null, error: null };
+                  return {
+                    data: {
+                      banned_at: null,
+                      cohort: testContext.cohort,
+                      referral_source: testContext.referralSource,
+                    },
+                    error: null,
+                  };
                 }),
               })),
             })),
@@ -128,7 +145,7 @@ function validScoringJson(): ScoringResult {
 describe("POST /api/score", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    testContext = { isBanned: false, profileError: false, dailyCount: 0, deletedIds: [], updatePayloads: [], isDeleting: false };
+    testContext = { isBanned: false, profileError: false, usedCount: 0, cohort: "founding", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false };
     mockCreate.mockClear();
     mockGetUser.mockClear();
   });
@@ -211,20 +228,87 @@ describe("POST /api/score", () => {
       expect(res.status).toBe(500);
     });
 
-    it("returns 429 when post-insert count exceeds 10 and deletes placeholder", async () => {
+    it("returns 403 quota_exhausted when post-insert count exceeds the free limit and deletes placeholder", async () => {
       // WHY: insert-then-count closes the race; the placeholder must not linger
+      // and burn a slot the user never actually spent
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.dailyCount = 11;
+      testContext.usedCount = 3;
       const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
       const res = await POST(req);
-      expect(res.status).toBe(429);
+      expect(res.status).toBe(403);
+      const data = await res.json() as Record<string, unknown>;
+      expect(data.code).toBe("quota_exhausted");
       expect(testContext.deletedIds).toContain("ph-1");
     });
 
-    it("returns 200 when post-insert count equals 10", async () => {
-      // WHY: > 10 not >= 10 — count includes this submission, so 10 means the user just used their last slot
+    it("returns 200 when post-insert count equals the free limit", async () => {
+      // WHY: > 2 not >= 2 — the count includes this submission, so 2 means the
+      // user is spending their second and final free test right now
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.dailyCount = 10;
+      testContext.usedCount = 2;
+      mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
+      const req = createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+    });
+
+    it("lets staff score past the free limit", async () => {
+      // WHY: team accounts must be able to QA without burning a founding allowance
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+      testContext.cohort = "staff";
+      testContext.usedCount = 99;
+      mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
+      const req = createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const data = await res.json() as Record<string, unknown>;
+      expect(data.remaining).toBeNull();
+    });
+  });
+
+  describe("Cohort gates", () => {
+    beforeEach(() => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    });
+
+    it("returns 403 waitlist for the waitlist cohort before any LLM call", async () => {
+      // WHY: waitlisted users must never reach the scorer — and never cost us an
+      // OpenRouter call to find out
+      testContext.cohort = "waitlist";
+      const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const data = await res.json() as Record<string, unknown>;
+      expect(data.code).toBe("waitlist");
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("treats a missing/unknown cohort as waitlist", async () => {
+      // WHY: fail closed — a null cohort must not grant free scoring
+      testContext.cohort = null;
+      const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const data = await res.json() as Record<string, unknown>;
+      expect(data.code).toBe("waitlist");
+    });
+
+    it("returns 403 onboarding_incomplete when attribution is missing", async () => {
+      // WHY: attribution is the whole point of the gate — it must be enforced
+      // server-side, not just by the UI redirect
+      testContext.referralSource = null;
+      const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      const data = await res.json() as Record<string, unknown>;
+      expect(data.code).toBe("onboarding_incomplete");
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("exempts staff from the attribution requirement", async () => {
+      // WHY: team accounts are created directly in Supabase and never see /welcome
+      testContext.cohort = "staff";
+      testContext.referralSource = null;
       mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
       const req = createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" });
       const res = await POST(req);
@@ -235,7 +319,7 @@ describe("POST /api/score", () => {
   describe("Retry Loop & Cleanup", () => {
     beforeEach(() => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.dailyCount = 5;
+      testContext.usedCount = 1;
     });
 
     it("returns 500 when mockCreate returns unparseable content twice and deletes placeholder", async () => {
@@ -296,7 +380,7 @@ describe("POST /api/score", () => {
   describe("Success Path", () => {
     beforeEach(() => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.dailyCount = 5;
+      testContext.usedCount = 1;
     });
 
     it("returns 200 with server-computed overall_band and word_count", async () => {
@@ -310,7 +394,7 @@ describe("POST /api/score", () => {
       const data = await res.json() as Record<string, unknown>;
       expect(data.overall_band).toBe(6.5);
       expect(data.word_count).toBe(5);
-      expect(data.remaining_today).toBe(5);
+      expect(data.remaining).toBe(1);
       expect(testContext.updatePayloads[0]).toHaveProperty("overall_band", 6.5);
       expect(testContext.deletedIds).toEqual([]);
     });
