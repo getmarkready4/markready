@@ -463,7 +463,7 @@ export default function ScorePage() {
           };
           return (
           <div className="space-y-8">
-            <ScoreReport result={result} taskType={taskType} />
+            <ScoreReport result={result} taskType={taskType} animate />
 
             {/* Next step — turn the report into an action */}
             <div className="space-y-3">

@@ -1,63 +1,175 @@
+"use client";
+
+import { useState, useEffect, useSyncExternalStore } from "react";
 import type { ScoringResult, CriterionKey, TaskType } from "@/types/scoring";
 import { CRITERION_LABELS, TASK_LABELS } from "@/types/scoring";
 
-function BandBar({ band }: { band: number }) {
-  const pct = ((band - 1) / 8) * 100;
-  const color =
-    band >= 7.5
-      ? "bg-teal-700"
-      : band >= 6.5
-        ? "bg-teal-600"
-        : band >= 5.5
-          ? "bg-amber-500"
-          : "bg-red-400";
+const REVEAL_MS = 1100; // how long one bar takes to fill
+const STAGGER_MS = 320; // gap between consecutive criteria starting
+const HERO_DELAY_MS = 150;
+const CRITERIA_DELAY_MS = 500;
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+// useSyncExternalStore rather than an effect: the OS setting is external state,
+// and subscribing this way keeps the server snapshot (false) consistent with
+// hydration instead of setting state during an effect.
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(REDUCED_MOTION_QUERY);
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(REDUCED_MOTION_QUERY).matches,
+    () => false
+  );
+}
+
+/**
+ * Eased 0→1 progress, starting after `delay`. Returns 1 outright when disabled,
+ * so the bar and the number are always driven by one value and cannot drift out
+ * of sync with each other.
+ */
+function useReveal(enabled: boolean, delay: number, duration = REVEAL_MS) {
+  const [t, setT] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let raf = 0;
+    let start: number | null = null;
+
+    const tick = (now: number) => {
+      if (start === null) start = now;
+      const p = Math.min(1, (now - start) / duration);
+      setT(1 - Math.pow(1 - p, 3)); // ease-out cubic: quick, then settling
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+
+    const timer = window.setTimeout(() => {
+      raf = requestAnimationFrame(tick);
+    }, delay);
+
+    // Safety net. requestAnimationFrame does not fire in a hidden tab, and the
+    // band is the whole point of the page — it must never be left showing 0.0
+    // because an animation frame never arrived. setTimeout still runs when
+    // hidden, so this guarantees the real score lands regardless.
+    const settle = window.setTimeout(
+      () => setT(1),
+      delay + duration + 400
+    );
+
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(settle);
+      cancelAnimationFrame(raf);
+    };
+  }, [enabled, delay, duration]);
+
+  return enabled ? t : 1;
+}
+
+// Colour comes from the *final* band, never the in-flight value — otherwise the
+// bar visibly changes colour mid-fill as it crosses each threshold.
+function barColor(band: number) {
+  return band >= 7.5
+    ? "bg-teal-700"
+    : band >= 6.5
+      ? "bg-teal-600"
+      : band >= 5.5
+        ? "bg-amber-500"
+        : "bg-red-400";
+}
+
+function pillColor(band: number) {
+  return band >= 7.5
+    ? "bg-teal-50 text-teal-800 border-teal-200"
+    : band >= 6.5
+      ? "bg-teal-50 text-teal-700 border-teal-200"
+      : band >= 5.5
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-red-50 text-red-700 border-red-200";
+}
+
+function BandBar({ band, t }: { band: number; t: number }) {
+  const fullPct = ((band - 1) / 8) * 100;
   return (
     <div className="h-2 rounded-full bg-stone-200 overflow-hidden">
       <div
-        className={`h-full rounded-full ${color} transition-all duration-700`}
-        style={{ width: `${pct}%` }}
+        className={`h-full rounded-full ${barColor(band)}`}
+        style={{ width: `${Math.max(0, fullPct * t)}%` }}
       />
     </div>
   );
 }
 
-function BandPill({ band }: { band: number }) {
-  const color =
-    band >= 7.5
-      ? "bg-teal-50 text-teal-800 border-teal-200"
-      : band >= 6.5
-        ? "bg-teal-50 text-teal-700 border-teal-200"
-        : band >= 5.5
-          ? "bg-amber-50 text-amber-700 border-amber-200"
-          : "bg-red-50 text-red-700 border-red-200";
+function BandPill({ band, t }: { band: number; t: number }) {
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold border ${color}`}
+      className={`inline-flex items-center justify-center min-w-[3rem] px-2.5 py-0.5 rounded-full text-sm font-semibold border tabular-nums ${pillColor(band)}`}
     >
-      {band.toFixed(1)}
+      {(band * t).toFixed(1)}
     </span>
+  );
+}
+
+/** One criterion row — bar and number share a single progress value. */
+function CriterionRow({
+  label,
+  band,
+  index,
+  animate,
+  children,
+}: {
+  label: string;
+  band: number;
+  index: number;
+  animate: boolean;
+  children: React.ReactNode;
+}) {
+  const t = useReveal(animate, CRITERIA_DELAY_MS + index * STAGGER_MS);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-[#23282B]">{label}</span>
+        <BandPill band={band} t={t} />
+      </div>
+      <BandBar band={band} t={t} />
+      {children}
+    </div>
   );
 }
 
 export function ScoreReport({
   result,
   taskType,
+  animate = false,
 }: {
   result: ScoringResult;
   taskType: TaskType;
+  /**
+   * Reveal the scores progressively. On for the fresh result on /score; off on
+   * /dashboard/[id], where replaying the count-up every time you reopen an old
+   * essay would just be in the way.
+   */
+  animate?: boolean;
 }) {
   const criteriaEntries = (Object.entries(result.criteria) as [
     CriterionKey,
     import("@/types/scoring").CriterionScore,
   ][]);
 
+  const reducedMotion = usePrefersReducedMotion();
+  const revealing = animate && !reducedMotion;
+  const heroT = useReveal(revealing, HERO_DELAY_MS, REVEAL_MS + 300);
+
   return (
     <div className="space-y-8">
       {/* Overall band hero */}
       <div className="rounded-2xl border border-[#E4DFD3] bg-white px-8 py-8 text-center shadow-sm">
         <p className="text-sm text-[#5B6266] mb-1">Estimated Overall Band</p>
-        <div className="font-serif text-8xl font-semibold text-[#1F5C4E] leading-none">
-          ~{result.overall_band.toFixed(1)}
+        <div className="font-serif text-8xl font-semibold text-[#1F5C4E] leading-none tabular-nums">
+          ~{(result.overall_band * heroT).toFixed(1)}
         </div>
         <p className="text-xs text-[#5B6266] mt-3">
           {result.word_count} words · IELTS {TASK_LABELS[taskType]}
@@ -102,15 +214,14 @@ export function ScoreReport({
                 Use the ranking, not the exact number
               </span>
             </div>
-            {criteriaEntries.map(([key, val]) => (
-              <div key={key} className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-[#23282B]">
-                    {CRITERION_LABELS[key]}
-                  </span>
-                  <BandPill band={val.band} />
-                </div>
-                <BandBar band={val.band} />
+            {criteriaEntries.map(([key, val], i) => (
+              <CriterionRow
+                key={key}
+                label={CRITERION_LABELS[key]}
+                band={val.band}
+                index={i}
+                animate={revealing}
+              >
                 {val.strengths_noted && (
                   <p className="text-xs text-[#1F5C4E] bg-[#E7EFEC] rounded-lg px-3 py-2 leading-relaxed">
                     ✓ {val.strengths_noted}
@@ -119,7 +230,7 @@ export function ScoreReport({
                 <p className="text-xs text-[#5B6266] leading-relaxed">
                   {val.rationale}
                 </p>
-              </div>
+              </CriterionRow>
             ))}
           </section>
 
