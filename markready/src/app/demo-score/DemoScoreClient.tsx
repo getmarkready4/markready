@@ -83,6 +83,14 @@ const MOCK: ScoringResult = {
     "A competent attempt with clear structure, held back by recurrent grammatical and lexical errors. Fixing agreement and plural forms would lift this closer to Band 6.",
 };
 
+const MOCK_ESSAY = `Nowaday, many peoples has different opinion about should schools make students to do community service or not. In this essay I will discuss both view and give my opinion.
+
+On one hand, some people think community service is very important for student life. When student do volunteer work, they can learn how to co-operate with other peoples and understand about real problem in society.
+
+On the other hand, other peoples believe student should focus only on there studies because exam is very competitive nowadays. Parents also worried that community service will effect the grades of childrens negatively, specially in final year.
+
+In my opinion, I think both things is important but the balance must be find. Schools can make community service compulsary but only small hours per week, so student don't feel too much pressure and can concentrate in academics also.`;
+
 export function DemoScoreClient() {
   const [runId, setRunId] = useState(0);
 
@@ -100,7 +108,13 @@ export function DemoScoreClient() {
             Replay animation
           </button>
         </div>
-        <ScoreReport key={runId} result={MOCK} taskType="TASK2" animate />
+        <ScoreReport
+          key={runId}
+          result={MOCK}
+          taskType="TASK2"
+          essay={MOCK_ESSAY}
+          animate
+        />
       </div>
     </div>
   );

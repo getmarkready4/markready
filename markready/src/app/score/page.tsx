@@ -114,6 +114,9 @@ export default function ScorePage() {
   const [question, setQuestion] = useState(SAMPLE_QUESTIONS.TASK2[0].text);
   const [customQuestion, setCustomQuestion] = useState(false);
   const [essay, setEssay] = useState("");
+  // Snapshot of the text that produced `result`. Kept separate because the
+  // editor is cleared on "Score another" while the report is still on screen.
+  const [scoredEssay, setScoredEssay] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(0);
   const [result, setResult] = useState<ScoringResult | null>(null);
@@ -221,6 +224,7 @@ export default function ScorePage() {
       } else {
         const remaining = typeof data.remaining === "number" ? data.remaining : null;
         setRemainingTests(remaining);
+        setScoredEssay(essay);
         setResult(data);
       }
     } catch {
@@ -463,7 +467,12 @@ export default function ScorePage() {
           };
           return (
           <div className="space-y-8">
-            <ScoreReport result={result} taskType={taskType} animate />
+            <ScoreReport
+              result={result}
+              taskType={taskType}
+              essay={scoredEssay}
+              animate
+            />
 
             {/* Next step — turn the report into an action */}
             <div className="space-y-3">
