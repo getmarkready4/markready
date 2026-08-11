@@ -356,7 +356,7 @@ export default function ScorePage() {
             {taskType === "TASK1_ACADEMIC" && (
               <div className="space-y-3 rounded-xl border border-[#E4DFD3] bg-white px-4 py-4">
                 <label className="block text-sm font-medium text-[#23282B]">
-                  Chart / diagram (optional)
+                  Chart / diagram
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/jpg,image/webp"
