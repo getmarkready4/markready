@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ScoreReport } from "@/components/ScoreReport";
 import { SignOutButton } from "@/components/SignOutButton";
+import { SAMPLE_CHARTS } from "@/components/task1-charts";
+import { svgToDataUri } from "@/components/task1-charts/svgToDataUri";
 
 const SAMPLE_QUESTIONS: Record<TaskType, { id: string; label: string; text: string }[]> = {
   TASK2: [
@@ -31,22 +33,117 @@ const SAMPLE_QUESTIONS: Record<TaskType, { id: string; label: string; text: stri
       label: "Population & the environment",
       text: "The increasing population is putting pressure on natural resources and the environment. What are the causes of this problem and what measures can be taken to address it?",
     },
+    {
+      id: "risk",
+      label: "Taking risks in life (Cam 17)",
+      text: "It is important for people to take risks, both in their professional lives and their personal lives. Do you think the advantages of taking risks outweigh the disadvantages? Give reasons for your answer and include any relevant examples from your own knowledge or experience.",
+    },
+    {
+      id: "smartphones",
+      label: "Children & smartphones (Cam 17)",
+      text: "Some children spend hours every day on their smartphones. Why is this the case? Do you think this is a positive or a negative development? Give reasons for your answer and include any relevant examples from your own knowledge or experience.",
+    },
+    {
+      id: "professionals",
+      label: "Working where you trained (Cam 17)",
+      text: "Some people believe that professionals, such as doctors and engineers, should be required to work in the country where they did their training. Others believe they should be free to work in another country if they wish. Discuss both these views and give your own opinion.",
+    },
+    {
+      id: "alt-medicine",
+      label: "Alternative medicine (Cam 17)",
+      text: "Nowadays, a growing number of people with health problems are trying alternative medicines and treatments instead of visiting their usual doctor. Do you think this is a positive or a negative development? Give reasons for your answer and include any relevant examples from your own knowledge or experience.",
+    },
+    {
+      id: "practical-skills",
+      label: "Facts vs practical skills in education (Cam 11 GT)",
+      text: "Some people say that in all levels of education, from primary schools to universities, too much time is spent on learning facts and not enough on learning practical skills. Do you agree or disagree? Give reasons for your answer and include any relevant examples from your own knowledge or experience.",
+    },
+    {
+      id: "clothes-culture",
+      label: "Clothes, culture & character (Cam 11 GT)",
+      text: "Some people say that it is possible to tell a lot about a person's culture and character from their choice of clothes. Do you agree or disagree? Give reasons for your answer and include any relevant examples from your own knowledge or experience.",
+    },
   ],
   TASK1_ACADEMIC: [
     {
       id: "museum",
-      label: "Museum visitor numbers (table)",
-      text: "The table below shows the numbers of visitors to Ashdown Museum during the year before and the year after it was refurbished. The charts show the result of surveys asking visitors how satisfied they were with their visit. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+      label: "Ashdown Museum visitors & satisfaction (table + pies)",
+      text: "The table below shows the numbers of visitors to Ashdown Museum during the year before and the year after it was refurbished. The charts show the result of surveys asking visitors how satisfied they were with their visit, during the same two periods. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
     },
     {
       id: "co2",
-      label: "CO2 emissions by country (graph)",
-      text: "The graph below shows the changes in the emission of carbon dioxide in four European countries between 1967 and 2007. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+      label: "CO2 emissions per person 1967–2007 (line graph)",
+      text: "The graph below shows average carbon dioxide (CO₂) emissions per person in the United Kingdom, Sweden, Italy and Portugal between 1967 and 2007. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
     },
     {
       id: "water",
-      label: "Water usage by region (diagram)",
-      text: "The diagrams below show the percentage of water used for different purposes in six areas of the world. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+      label: "Water use in six areas of the world (pie charts)",
+      text: "The charts below show the percentage of water used for different purposes in six areas of the world. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "languages",
+      label: "British students' other languages 2000/2010 (pie charts)",
+      text: "The charts below show the proportions of British students at one university in England who were able to speak other languages in addition to English, in 2000 and 2010. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "nutrients",
+      label: "Sodium, fat & sugar by meal, USA (pie charts)",
+      text: "The charts below show the average percentages in typical meals of three types of nutrients, all of which may be unhealthy if eaten too much. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "exports",
+      label: "Value of exports by category 2015/2016 (bar + table)",
+      text: "The chart below shows the value of one country's exports in various categories during 2015 and 2016. The table shows the percentage change in each category of exports in 2016 compared with 2015. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "coffee",
+      label: "Coffee & tea habits, 5 Australian cities (bar chart)",
+      text: "The chart below shows the results of a survey about people's coffee and tea buying and drinking habits in five Australian cities. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "caribbean",
+      label: "Tourists visiting a Caribbean island 2010–2017 (line)",
+      text: "The graph below shows the number of tourists visiting a particular Caribbean island between 2010 and 2017. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "anthropology",
+      label: "Anthropology graduate destinations & salaries (pie + table)",
+      text: "The chart below shows what Anthropology graduates from one university did after finishing their undergraduate degree course. The table shows the salaries of the anthropologists in work after five years. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "urban",
+      label: "Urban population in 4 Asian countries (line graph)",
+      text: "The graph below gives information about the percentage of the population in four Asian countries living in cities from 1970 to 2020, with predictions for 2030 and 2040. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "households",
+      label: "US households by income 2007/2011/2015 (bar chart)",
+      text: "The chart below shows the number of households in the US by their annual income in 2007, 2011 and 2015. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "metals",
+      label: "Monthly price change of 3 metals 2014 (line graph)",
+      text: "The graph below shows the average monthly change in the prices of three metals during 2014. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "appliances",
+      label: "Appliance ownership & housework hours (line graphs)",
+      text: "The charts below show the changes in ownership of electrical appliances and amount of time spent doing housework in households in one country between 1920 and 2019. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "police",
+      label: "Police budget 2017–2018 (table + pie charts)",
+      text: "The table and charts below give information on the police budget for 2017 and 2018 in one area of Britain. The table shows where the money came from and the charts show how it was distributed. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "spending",
+      label: "Weekly family spending 1968 vs 2018 (bar chart)",
+      text: "The chart below gives information about how families in one country spent their weekly income in 1968 and in 2018. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
+    },
+    {
+      id: "shops",
+      label: "Shop closures and openings 2011–2018 (line graph)",
+      text: "The graph below shows the number of shops that closed and the number of new shops that opened in one country between 2011 and 2018. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.",
     },
   ],
   TASK1_GENERAL: [
@@ -59,6 +156,26 @@ const SAMPLE_QUESTIONS: Record<TaskType, { id: string; label: string; text: stri
       id: "complaint",
       label: "Complaint letter about equipment",
       text: "You recently bought a piece of equipment for your home but it did not work. Write a letter to the shop manager. In your letter: describe what you bought, explain the problem, say what you want the manager to do.",
+    },
+    {
+      id: "college-job",
+      label: "Advising a friend: college or a job (Cam 11 GT)",
+      text: "You recently received a letter from a friend asking for advice about whether to go to college or to try to get a job. You think he/she should get a job. Write a letter to this friend. In your letter: say why he/she would not enjoy going to college; explain why getting a job is a good idea for him/her; suggest types of job that would be suitable for him/her. You do NOT need to write any addresses. Begin your letter as follows: Dear ...,",
+    },
+    {
+      id: "hotel-papers",
+      label: "Papers left at a hotel (Cam 11 GT)",
+      text: "You recently attended a meeting at a hotel. When you returned home, you found you had left some important papers at the hotel. Write a letter to the manager of the hotel. In your letter: say where you think you left the papers; explain why they are so important; tell the manager what you want him/her to do. You do NOT need to write any addresses. Begin your letter as follows: Dear Sir or Madam,",
+    },
+    {
+      id: "leisure-centre",
+      label: "Letter to the local council: leisure centre (Cam 11 GT)",
+      text: "Your local council is considering closing a sports and leisure centre that it runs, in order to save money. Write a letter to the local council. In your letter: give details of how you and your friends or family use the centre; explain why the sports and leisure centre is important for the local community; describe the possible effects on local people if the centre closes. You do NOT need to write any addresses. Begin your letter as follows: Dear Sir or Madam,",
+    },
+    {
+      id: "training-course",
+      label: "Requesting a training course (Cam 11 GT)",
+      text: "You work for an international company. You have seen an advertisement for a training course which will be useful for your job. Write a letter to your manager. In your letter: describe the training course you want to do; explain what the company could do to help you; say how the course will be useful for your job. You do NOT need to write any addresses. Begin your letter as follows: Dear Sir or Madam,",
     },
   ],
 };
@@ -124,6 +241,7 @@ export default function ScorePage() {
   const [remainingTests, setRemainingTests] = useState<number | null>(null);
   const [focusTip, setFocusTip] = useState<{ label: string; fix: string } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chartWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
@@ -133,6 +251,36 @@ export default function ScorePage() {
 
   const minWords = MIN_WORDS[taskType];
   const wordCount = essay.trim() ? essay.trim().split(/\s+/).length : 0;
+
+  // Which Task 1 Academic sample (if any) is currently selected, and its chart.
+  const sampleChartId =
+    taskType === "TASK1_ACADEMIC" && !customQuestion
+      ? SAMPLE_QUESTIONS.TASK1_ACADEMIC.find((q) => q.text === question)?.id ?? null
+      : null;
+  const SampleChart = sampleChartId ? SAMPLE_CHARTS[sampleChartId] ?? null : null;
+
+  // When a sample chart is shown, rasterize it and feed it to scoring exactly
+  // like an uploaded image. Leaving a sample (task-type switch or "use my own
+  // question") clears imageDataUri in those handlers, not here.
+  useEffect(() => {
+    if (!SampleChart) return;
+    let cancelled = false;
+    const svg = chartWrapperRef.current?.querySelector("svg");
+    if (svg) {
+      svgToDataUri(svg as unknown as SVGSVGElement)
+        .then((uri) => {
+          if (!cancelled) setImageDataUri(uri);
+        })
+        .catch(() => {
+          // Rasterization failed — leave the image unset; the response can
+          // still be scored for structure and language without data accuracy.
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sampleChartId]);
 
   function switchTaskType(t: TaskType) {
     setTaskType(t);
@@ -324,6 +472,8 @@ export default function ScorePage() {
                   if (e.target.value === "__custom__") {
                     setCustomQuestion(true);
                     setQuestion("");
+                    // Drop any auto-fed sample chart; custom questions use upload.
+                    setImageDataUri(null);
                   } else {
                     setCustomQuestion(false);
                     setQuestion(e.target.value);
@@ -352,34 +502,46 @@ export default function ScorePage() {
               )}
             </div>
 
-            {/* Image upload for Task 1 Academic */}
-            {taskType === "TASK1_ACADEMIC" && (
-              <div className="space-y-3 rounded-xl border border-[#E4DFD3] bg-white px-4 py-4">
-                <label className="block text-sm font-medium text-[#23282B]">
-                  Chart / diagram
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
-                    onChange={handleImageChange}
-                    className="block w-full mt-2 text-sm text-[#5B6266] border border-[#E4DFD3] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30"
-                  />
-                </label>
-                {imageDataUri && (
-                  <div className="space-y-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- inline data URI; next/image has nothing to optimize */}
-                    <img src={imageDataUri} alt="Attached chart" className="max-h-48 rounded" />
-                    <button
-                      type="button"
-                      onClick={() => setImageDataUri(null)}
-                      className="text-sm px-3 py-2 rounded-lg border border-[#E4DFD3] text-[#23282B] hover:bg-[#F2EEE5] transition-colors"
-                    >
-                      Remove
-                    </button>
+            {/* Chart / diagram for Task 1 Academic: shown sample chart (auto-scored)
+                or manual upload for a custom question. */}
+            {taskType === "TASK1_ACADEMIC" &&
+              (SampleChart ? (
+                <div className="space-y-2 rounded-xl border border-[#E4DFD3] bg-white px-4 py-4">
+                  <p className="text-sm font-medium text-[#23282B]">Chart / diagram</p>
+                  <div ref={chartWrapperRef} className="overflow-x-auto">
+                    <SampleChart />
                   </div>
-                )}
-                <p className="text-sm text-gray-500">Attach the chart for accurate data scoring.</p>
-              </div>
-            )}
+                  <p className="text-sm text-gray-500">
+                    This chart is included with your response for accurate data scoring.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 rounded-xl border border-[#E4DFD3] bg-white px-4 py-4">
+                  <label className="block text-sm font-medium text-[#23282B]">
+                    Chart / diagram
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      onChange={handleImageChange}
+                      className="block w-full mt-2 text-sm text-[#5B6266] border border-[#E4DFD3] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30"
+                    />
+                  </label>
+                  {imageDataUri && (
+                    <div className="space-y-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- inline data URI; next/image has nothing to optimize */}
+                      <img src={imageDataUri} alt="Attached chart" className="max-h-48 rounded" />
+                      <button
+                        type="button"
+                        onClick={() => setImageDataUri(null)}
+                        className="text-sm px-3 py-2 rounded-lg border border-[#E4DFD3] text-[#23282B] hover:bg-[#F2EEE5] transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-500">Attach the chart for accurate data scoring.</p>
+                </div>
+              ))}
 
             {/* Essay / response */}
             <div className="space-y-2">
