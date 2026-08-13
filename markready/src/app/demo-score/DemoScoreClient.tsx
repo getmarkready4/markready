@@ -4,7 +4,6 @@
 // DELETE THIS FILE before merging. It is unauthenticated by design so the
 // reveal animation can be reviewed without a Supabase session.
 
-import { useState } from "react";
 import { ScoreReport } from "@/components/ScoreReport";
 import type { ScoringResult } from "@/types/scoring";
 
@@ -92,24 +91,15 @@ On the other hand, other peoples believe student should focus only on there stud
 In my opinion, I think both things is important but the balance must be find. Schools can make community service compulsary but only small hours per week, so student don't feel too much pressure and can concentrate in academics also.`;
 
 export function DemoScoreClient() {
-  const [runId, setRunId] = useState(0);
-
   return (
     <div className="min-h-screen bg-[#FAF8F3] px-4 py-10">
       <div className="max-w-3xl mx-auto">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6">
           <p className="text-sm text-[#5B6266]">
             Demo — animated score reveal (mock data)
           </p>
-          <button
-            onClick={() => setRunId((n) => n + 1)}
-            className="px-4 py-2 rounded-lg bg-[#23282B] text-white text-sm font-medium"
-          >
-            Replay animation
-          </button>
         </div>
         <ScoreReport
-          key={runId}
           result={MOCK}
           taskType="TASK2"
           essay={MOCK_ESSAY}
