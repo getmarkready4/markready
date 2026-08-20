@@ -80,7 +80,11 @@ export default async function SubmissionPage({
 
         {/* Score Report */}
         <div className="rounded-2xl border border-[#E4DFD3] bg-white p-6 shadow-sm">
-          <ScoreReport result={sub.scores!} taskType={sub.task_type} />
+          <ScoreReport
+            result={sub.scores!}
+            taskType={sub.task_type}
+            essay={sub.essay ?? undefined}
+          />
         </div>
 
         {/* Back link */}
