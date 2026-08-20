@@ -1,0 +1,420 @@
+{
+  "TASK2": [
+    {
+      "id": "t2-community-service",
+      "label": "Compulsory community service in schools",
+      "text": "Some people believe that unpaid community service should be a compulsory part of high school programmes. Others believe students should spend this time on their academic studies instead. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-remote-work",
+      "label": "Working from home: pros & cons",
+      "text": "Working from home has become increasingly common in recent years. Some argue this is beneficial for both employers and employees, while others believe it has significant drawbacks. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-social-media-young",
+      "label": "Social media & young people",
+      "text": "Social media platforms have a largely negative effect on young people today. To what extent do you agree or disagree?"
+    },
+    {
+      "id": "t2-arts-funding",
+      "label": "Government funding for the arts",
+      "text": "Some people think that governments should fund the arts, while others believe public money should be spent on other priorities. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-university-free",
+      "label": "Free university education",
+      "text": "In some countries, university tuition is free for all students. Others argue that students should contribute to the cost of their education. Do the advantages of free university education outweigh the disadvantages?"
+    },
+    {
+      "id": "t2-fast-food",
+      "label": "Rise of fast food worldwide",
+      "text": "Fast food is becoming increasingly popular around the world. Why is this the case? Is this a positive or negative development?"
+    },
+    {
+      "id": "t2-elderly-family",
+      "label": "Caring for the elderly: family vs facilities",
+      "text": "In some cultures, elderly people are looked after by their families at home. In others, they are cared for in specialist facilities. What are the advantages and disadvantages of each approach?"
+    },
+    {
+      "id": "t2-space-exploration",
+      "label": "Spending on space exploration",
+      "text": "Some people believe that the money spent on space exploration would be better used addressing problems on Earth. Others argue that space research benefits humanity in the long term. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-private-cars",
+      "label": "Growth in private car ownership",
+      "text": "Private car ownership is increasing in many countries. This is causing serious problems for both individuals and society as a whole. What are the causes of this trend and what measures could be taken to address it?"
+    },
+    {
+      "id": "t2-globalisation-culture",
+      "label": "Globalisation & cultural identity",
+      "text": "Globalisation is causing many local cultures and traditions to disappear. Some see this as a positive development, while others see it as a loss. To what extent do you agree that globalisation is a threat to cultural identity?"
+    },
+    {
+      "id": "t2-online-learning",
+      "label": "Online vs on-campus university study",
+      "text": "Many universities now offer online courses as an alternative to classes delivered on campus. Do you think this is a positive or negative development for students and universities?"
+    },
+    {
+      "id": "t2-gap-year",
+      "label": "Taking a gap year before university",
+      "text": "Some people argue that school leavers should take a year off before starting university to travel or gain work experience. Others believe they should go straight to university. What are the advantages and disadvantages of taking a gap year?"
+    },
+    {
+      "id": "t2-vegetarianism",
+      "label": "Should everyone adopt a vegetarian diet?",
+      "text": "Some people argue that everyone should adopt a vegetarian diet because of the environmental impact of meat production. To what extent do you agree or disagree?"
+    },
+    {
+      "id": "t2-advertising-children",
+      "label": "Advertising aimed at children",
+      "text": "Advertising aimed at children has a negative impact on both children and society. To what extent do you agree or disagree?"
+    },
+    {
+      "id": "t2-nuclear-energy",
+      "label": "Nuclear energy expansion",
+      "text": "Nuclear energy is a clean and safe source of power. Some believe it should be expanded to meet growing global energy demands, while others argue the risks are too great. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-sport-funding",
+      "label": "Elite athlete funding vs mass participation",
+      "text": "Some countries invest heavily in training elite athletes to compete in international competitions. Others believe this money should be used to encourage all citizens to take part in sport. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-traffic-congestion",
+      "label": "Urban traffic congestion",
+      "text": "Traffic congestion in cities is a growing problem around the world. What are the main causes of this problem and what solutions would you recommend?"
+    },
+    {
+      "id": "t2-plastic-waste",
+      "label": "The global plastic waste problem",
+      "text": "The amount of plastic waste produced globally is a serious environmental problem. Why has this problem arisen and what can governments and individuals do to address it?"
+    },
+    {
+      "id": "t2-language-learning",
+      "label": "Foreign languages at primary school",
+      "text": "Some people believe that children should learn a foreign language from the very first year of school. Others argue that this is too young. What are the advantages and disadvantages of introducing foreign languages at primary school?"
+    },
+    {
+      "id": "t2-zoos",
+      "label": "Should zoos be closed?",
+      "text": "Some people believe that zoos are cruel and that all zoos should be closed. Others argue that zoos play an important role in conservation. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-death-penalty",
+      "label": "Capital punishment as a deterrent",
+      "text": "Capital punishment is still used in some countries as a deterrent for serious crimes. Some argue it is justified, while others believe it is never acceptable. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-volunteering",
+      "label": "Volunteering in developing countries",
+      "text": "Voluntary work in developing countries is becoming increasingly popular. Some argue it benefits both the volunteers and local communities, while others believe it causes more harm than good. To what extent do you agree or disagree?"
+    },
+    {
+      "id": "t2-iq-tests",
+      "label": "Using IQ tests in recruitment",
+      "text": "Some companies use intelligence tests when recruiting staff. Do the advantages of using such tests outweigh the disadvantages?"
+    },
+    {
+      "id": "t2-mental-health-schools",
+      "label": "Rising mental health problems in youth",
+      "text": "Mental health problems among young people are on the rise. Why is this happening and what steps can schools and governments take to address the problem?"
+    },
+    {
+      "id": "t2-migration",
+      "label": "International migration: benefits & problems",
+      "text": "International migration has increased significantly in recent decades. Some see this as beneficial, while others believe it creates serious problems. Discuss both views and give your own opinion."
+    },
+    {
+      "id": "t2-robots-jobs",
+      "label": "Robots & AI replacing human workers",
+      "text": "Robots and artificial intelligence are increasingly replacing human workers in many industries. What are the effects of this trend and do the benefits outweigh the drawbacks?"
+    }
+  ],
+
+  "TASK1_ACADEMIC": [
+    {
+      "id": "t1a-uk-age",
+      "label": "UK population by age group 1985–2040 (bar chart)",
+      "text": "The chart below shows the percentage of the population in different age groups in the UK in 1985 and 2010, with projections for 2040. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-renewable-energy",
+      "label": "Renewable energy share, 5 countries 2000–2020 (line graph)",
+      "text": "The graph below shows the proportion of energy produced from renewable sources in five countries between 2000 and 2020. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-household-spending",
+      "label": "Household income spending categories 1960 vs 2020 (pie charts)",
+      "text": "The pie charts below show the proportion of household income spent on different categories in a European country in 1960 and 2020. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-transport-map",
+      "label": "Town centre changes 1990 to present (maps)",
+      "text": "The maps below show a town centre in 1990 and the same area today. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-student-employment",
+      "label": "Graduate employment rates by degree subject (bar chart)",
+      "text": "The bar chart below shows the employment rates of graduates from four different degree subjects five years after graduating. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-internet-access",
+      "label": "Household internet access 2005–2020 (line graph)",
+      "text": "The graph below shows the percentage of households with internet access in four countries between 2005 and 2020. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-recycling-rates",
+      "label": "Recycling rates by material 2010 & 2022 (bar chart)",
+      "text": "The bar chart below compares the recycling rates of five different materials in a European country in 2010 and 2022. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-life-expectancy",
+      "label": "Life expectancy by gender, 3 countries 1970–2020 (line graph)",
+      "text": "The graph below shows changes in life expectancy at birth for males and females in three countries between 1970 and 2020. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-tourist-spending",
+      "label": "Average tourist spending in the UK 2022 (table)",
+      "text": "The table below shows the average amount spent by tourists from five countries when visiting the UK in 2022. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-obesity-rates",
+      "label": "Adults overweight/obese in 6 countries 2000 & 2020 (bar charts)",
+      "text": "The charts below show the percentage of adults classified as overweight or obese in six countries in 2000 and 2020. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-water-cycle",
+      "label": "The water cycle (process diagram)",
+      "text": "The diagram below illustrates the water cycle, showing how water moves between the ocean, atmosphere, and land. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-manufacturing-process",
+      "label": "Glass bottle manufacturing & recycling (process diagram)",
+      "text": "The diagram below shows the process by which glass bottles are manufactured and recycled. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-literacy-rates",
+      "label": "Adult literacy rates by gender 1990 & 2020 (bar chart)",
+      "text": "The chart below shows adult literacy rates in selected regions of the world in 1990 and 2020, broken down by gender. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-commute-times",
+      "label": "Average commute times & transport modes, 6 cities (bar chart)",
+      "text": "The bar chart below shows the average commute times for workers in six major cities and the proportion of people using different modes of transport. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-film-genres",
+      "label": "Cinema tickets sold by genre 2005 vs 2023 (pie charts)",
+      "text": "The pie charts below show the proportion of cinema tickets sold by genre in a particular country in 2005 and 2023. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-population-growth",
+      "label": "Urban vs rural population growth 2000–2050 (line graph)",
+      "text": "The graph below shows projected population growth in urban and rural areas of the world between 2000 and 2050. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-sports-participation",
+      "label": "Sports participation by age group, UK adults (table)",
+      "text": "The table below shows participation rates in different sports and physical activities among adults in the UK, broken down by age group. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-electricity-sources",
+      "label": "Electricity generation sources, 2 countries 2020 (pie charts)",
+      "text": "The charts below compare the sources of electricity generation in two countries in 2020. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-housing-prices",
+      "label": "Average house prices in 3 cities 2000–2022 (line graph)",
+      "text": "The graph below shows changes in average house prices in three cities between 2000 and 2022. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-diet-comparison",
+      "label": "Daily calorie intake by food type, 4 countries (table)",
+      "text": "The table below shows the average daily calorie intake and its breakdown by food type in four countries. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-language-speakers",
+      "label": "Native & total speakers of top 10 languages (bar chart)",
+      "text": "The bar chart below shows the number of native and total speakers of the ten most widely spoken languages in the world. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-hospital-waiting",
+      "label": "Hospital waiting times, 4 countries 10-year period (line graph)",
+      "text": "The graph below shows average waiting times for non-emergency hospital treatment in four countries over a ten-year period. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-coffee-production",
+      "label": "Coffee production by top 5 countries 2010 & 2022 (bar chart)",
+      "text": "The chart below shows the amount of coffee produced by the five largest producing countries and the change in production between 2010 and 2022. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-education-spending",
+      "label": "Government education spending % GDP 2000–2020 (line graph)",
+      "text": "The graph below shows government spending on education as a percentage of GDP in six countries between 2000 and 2020. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-crime-types",
+      "label": "Recorded crime by type in a city over 3 years (bar chart)",
+      "text": "The bar chart below shows the number of recorded offences of four types of crime in a city over three years. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-smartphone-ownership",
+      "label": "Smartphone ownership by age group 2012 & 2022 (line graph)",
+      "text": "The graph below shows the percentage of people in different age groups who own a smartphone in a particular country in 2012 and 2022. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-migration-flows",
+      "label": "Emigration & immigration in 4 countries (bar chart)",
+      "text": "The chart below shows the number of people emigrating from and immigrating to four countries in a given year. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    },
+    {
+      "id": "t1a-electricity-consumption",
+      "label": "Electricity consumption by sector, 3 countries (bar chart)",
+      "text": "The chart below shows electricity consumption divided by sector — residential, industrial, and commercial — in three countries in a recent year. Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+    }
+  ],
+
+  "TASK1_GENERAL": [
+    {
+      "id": "t1g-friend-visit",
+      "label": "Letter to a friend: visiting your home",
+      "text": "A friend from another country is coming to stay with you for a holiday. Write a letter to your friend. In your letter:\n• tell your friend how to get to your home from the airport\n• describe what the weather will be like\n• suggest some activities you could do together."
+    },
+    {
+      "id": "t1g-library-membership",
+      "label": "Letter to a library: joining as a member",
+      "text": "You want to join a library in a town you have recently moved to. Write a letter to the head librarian. In your letter:\n• explain why you want to join the library\n• ask what is required to become a member\n• ask about any special services the library offers."
+    },
+    {
+      "id": "t1g-job-application",
+      "label": "Letter of application for a part-time job",
+      "text": "You have seen an advertisement for a part-time job at a local company. Write a letter of application to the company. In your letter:\n• explain why you are interested in the job\n• describe your relevant experience and skills\n• say when you are available for an interview."
+    },
+    {
+      "id": "t1g-noise-complaint",
+      "label": "Letter to a neighbour about noise",
+      "text": "You are experiencing problems with noise from a neighbouring property. Write a letter to your neighbour. In your letter:\n• describe the problem\n• explain how it is affecting you\n• suggest what your neighbour could do to resolve the situation."
+    },
+    {
+      "id": "t1g-holiday-apartment",
+      "label": "Letter to rent a holiday apartment",
+      "text": "You and a group of friends are planning a holiday and wish to rent an apartment. Write a letter to the apartment owner. In your letter:\n• describe your group and the dates you wish to visit\n• ask about facilities available in the apartment\n• ask about the local area and transport links."
+    },
+    {
+      "id": "t1g-damaged-bag",
+      "label": "Letter to an airline about damaged luggage",
+      "text": "You recently travelled by plane and discovered that your bag had been damaged. Write a letter to the airline. In your letter:\n• describe what happened\n• explain what was damaged and how\n• say what you would like the airline to do."
+    },
+    {
+      "id": "t1g-colleague-farewell",
+      "label": "Letter to a departing colleague",
+      "text": "A colleague at work is leaving the company. Write a letter to your colleague. In your letter:\n• say what you will miss most about working with them\n• describe your best memory of working together\n• wish them well for the future and suggest staying in touch."
+    },
+    {
+      "id": "t1g-council-park",
+      "label": "Letter to the council about a local park",
+      "text": "You are concerned about the condition of a local park. Write a letter to the local council. In your letter:\n• describe the current condition of the park\n• explain why this is a problem for the local community\n• suggest what improvements you would like to see made."
+    },
+    {
+      "id": "t1g-course-enquiry",
+      "label": "Letter to a college about a language course",
+      "text": "You want to attend an English language course at a college in an English-speaking country. Write a letter to the college. In your letter:\n• explain your reasons for wanting to study there\n• ask for information about course options and costs\n• ask about accommodation for students."
+    },
+    {
+      "id": "t1g-friend-advice",
+      "label": "Letter advising a friend about moving cities",
+      "text": "A friend has written to you asking for your advice about whether to move to the city where you live to look for work. Write a letter to your friend. In your letter:\n• describe what kinds of jobs are available in your city\n• explain what the advantages and disadvantages of living there are\n• give your personal recommendation."
+    },
+    {
+      "id": "t1g-subscription-cancel",
+      "label": "Letter to cancel a gym membership",
+      "text": "You have been a member of a gym for two years but want to cancel your membership. Write a letter to the gym manager. In your letter:\n• explain why you want to cancel your membership\n• ask about the cancellation process and any fees\n• ask whether the membership could be transferred to a friend."
+    },
+    {
+      "id": "t1g-festival-volunteer",
+      "label": "Letter to volunteer at a local festival",
+      "text": "You would like to volunteer at a local cultural festival. Write a letter to the festival organiser. In your letter:\n• explain why you are interested in volunteering\n• describe any relevant experience or skills you have\n• ask what the volunteer role would involve."
+    },
+    {
+      "id": "t1g-hotel-complaint",
+      "label": "Complaint letter to a hotel manager",
+      "text": "You stayed at a hotel recently and were unhappy with several aspects of your stay. Write a letter to the hotel manager. In your letter:\n• describe the problems you experienced\n• explain how these problems affected your stay\n• say what you expect the hotel to do in response."
+    },
+    {
+      "id": "t1g-borrow-item",
+      "label": "Letter to borrow an item from a friend",
+      "text": "You need to borrow an item from a friend while you are visiting their area. Write a letter to your friend. In your letter:\n• explain why you need the item\n• say when you will need it and for how long\n• offer to do something in return."
+    },
+    {
+      "id": "t1g-school-reunion",
+      "label": "Letter about a school reunion",
+      "text": "You are organising a reunion for former classmates. Write a letter to one of your old friends from school. In your letter:\n• remind your friend who you are and how you knew each other\n• give details of the planned reunion event\n• ask your friend to spread the word to others."
+    },
+    {
+      "id": "t1g-sports-club",
+      "label": "Letter to start a community sports club",
+      "text": "You want to start a new sports club in your local community. Write a letter to the local recreation centre. In your letter:\n• describe the sport and explain why you want to start the club\n• ask whether the centre has facilities you could use\n• ask about any costs or requirements involved."
+    },
+    {
+      "id": "t1g-work-reference",
+      "label": "Letter requesting a work reference",
+      "text": "You are applying for a new job and need a reference from a former employer. Write a letter to your former manager. In your letter:\n• remind your manager of the work you did together\n• explain the new job you are applying for\n• ask if they would be willing to provide a reference."
+    },
+    {
+      "id": "t1g-traffic-problem",
+      "label": "Letter to a councillor about local traffic",
+      "text": "There is a serious traffic problem near your home that is causing problems for local residents. Write a letter to your local government representative. In your letter:\n• describe the traffic problem and where it occurs\n• explain how it is affecting people in the area\n• suggest what action should be taken to resolve the problem."
+    },
+    {
+      "id": "t1g-flight-delay",
+      "label": "Letter to an airline about a flight delay",
+      "text": "You recently missed an important event because your flight was significantly delayed. Write a letter to the airline. In your letter:\n• describe what happened and how long the delay was\n• explain what event you missed as a result\n• say what compensation you believe you are entitled to."
+    },
+    {
+      "id": "t1g-mentor-thanks",
+      "label": "Thank-you letter to a former mentor",
+      "text": "Someone helped you significantly when you first started a new job. Write a letter to this person. In your letter:\n• explain why you are writing now\n• describe the specific ways in which they helped you\n• say how their help has benefited you in the long term."
+    },
+    {
+      "id": "t1g-childcare-enquiry",
+      "label": "Letter enquiring about childcare",
+      "text": "You are looking for childcare for your young child while you return to work. Write a letter to a local childcare centre. In your letter:\n• describe your child and their needs\n• ask about the hours, cost, and facilities available\n• ask how you can arrange a visit to the centre."
+    },
+    {
+      "id": "t1g-newspaper-letter",
+      "label": "Letter to a newspaper editor",
+      "text": "You have read an article in your local newspaper that you strongly disagree with. Write a letter to the editor of the newspaper. In your letter:\n• explain which article you are writing about\n• say what you disagree with and why\n• suggest what you think the newspaper should do differently."
+    },
+    {
+      "id": "t1g-cooking-class",
+      "label": "Letter enquiring about cooking classes",
+      "text": "You want to learn how to cook a particular type of cuisine and have heard that a local restaurant offers cooking classes. Write a letter to the restaurant. In your letter:\n• explain your interest in learning to cook this cuisine\n• ask for details about the classes, including schedule and cost\n• ask whether the classes are suitable for beginners."
+    },
+    {
+      "id": "t1g-flat-wanted",
+      "label": "Letter to a letting agency about renting",
+      "text": "You are looking for a flat to rent in a new city where you are starting a job. Write a letter to a letting agency. In your letter:\n• describe the type of property you are looking for\n• explain your budget and when you need to move in\n• ask about the services the agency provides to tenants."
+    },
+    {
+      "id": "t1g-internet-outage",
+      "label": "Complaint letter about an internet outage",
+      "text": "You have been without internet service at home for two weeks despite several complaints to your provider. Write a letter to the internet service provider. In your letter:\n• describe the problem and how long it has lasted\n• explain how the lack of service has affected you\n• state clearly what you want the company to do."
+    },
+    {
+      "id": "t1g-conference-request",
+      "label": "Letter to a conference organiser",
+      "text": "Your manager has asked you to attend an international conference on behalf of your company. Write a letter to the conference organiser. In your letter:\n• confirm your attendance and the name of your company\n• ask for details about the programme and speakers\n• ask about accommodation options near the venue."
+    },
+    {
+      "id": "t1g-lost-property",
+      "label": "Letter to a lost property office",
+      "text": "You have lost an important item on public transport. Write a letter to the lost property office. In your letter:\n• describe the item in detail\n• explain when and where you think you lost it\n• ask what the process is for claiming lost property."
+    },
+    {
+      "id": "t1g-birthday-surprise",
+      "label": "Letter asking a friend to help plan a surprise",
+      "text": "You are planning a surprise birthday party for a mutual friend and need help from another friend. Write a letter to this friend. In your letter:\n• explain what you are planning and why you need their help\n• describe what you would like them to do\n• ask them to keep the party a secret from the person being celebrated."
+    }
+  ]
+}

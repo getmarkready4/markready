@@ -10,6 +10,16 @@ import { ScoreReport } from "@/components/ScoreReport";
 import { SignOutButton } from "@/components/SignOutButton";
 import { SAMPLE_CHARTS } from "@/components/task1-charts";
 import { svgToDataUri } from "@/components/task1-charts/svgToDataUri";
+import questionBank from "@/data/question-bank.json";
+
+function shuffled<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 const SAMPLE_QUESTIONS: Record<TaskType, { id: string; label: string; text: string }[]> = {
   TASK2: [
@@ -180,6 +190,26 @@ const SAMPLE_QUESTIONS: Record<TaskType, { id: string; label: string; text: stri
   ],
 };
 
+// Merges Cambridge-sourced questions with a randomly-selected subset from the
+// generated bank. Shuffled at module load so each page session gets a different
+// rotation of bank questions in the dropdown.
+const BANK_PER_TYPE = 8;
+type Question = { id: string; label: string; text: string };
+const QUESTIONS: Record<TaskType, Question[]> = {
+  TASK2: [
+    ...SAMPLE_QUESTIONS.TASK2,
+    ...shuffled(questionBank.TASK2 as Question[]).slice(0, BANK_PER_TYPE),
+  ],
+  TASK1_ACADEMIC: [
+    ...SAMPLE_QUESTIONS.TASK1_ACADEMIC,
+    ...shuffled(questionBank.TASK1_ACADEMIC as Question[]).slice(0, BANK_PER_TYPE),
+  ],
+  TASK1_GENERAL: [
+    ...SAMPLE_QUESTIONS.TASK1_GENERAL,
+    ...shuffled(questionBank.TASK1_GENERAL as Question[]).slice(0, BANK_PER_TYPE),
+  ],
+};
+
 const TASK_DESCRIPTIONS: Record<TaskType, string> = {
   TASK2: "Write an essay of at least 250 words responding to the prompt.",
   TASK1_ACADEMIC: "Describe a graph, chart, table or diagram in at least 150 words. Include an overview of the main trends.",
@@ -228,7 +258,7 @@ async function downscaleImage(file: File): Promise<string> {
 export default function ScorePage() {
   const router = useRouter();
   const [taskType, setTaskType] = useState<TaskType>("TASK2");
-  const [question, setQuestion] = useState(SAMPLE_QUESTIONS.TASK2[0].text);
+  const [question, setQuestion] = useState(QUESTIONS.TASK2[0].text);
   const [customQuestion, setCustomQuestion] = useState(false);
   const [essay, setEssay] = useState("");
   const [loading, setLoading] = useState(false);
@@ -255,7 +285,7 @@ export default function ScorePage() {
   // Which Task 1 Academic sample (if any) is currently selected, and its chart.
   const sampleChartId =
     taskType === "TASK1_ACADEMIC" && !customQuestion
-      ? SAMPLE_QUESTIONS.TASK1_ACADEMIC.find((q) => q.text === question)?.id ?? null
+      ? QUESTIONS.TASK1_ACADEMIC.find((q) => q.text === question)?.id ?? null
       : null;
   const SampleChart = sampleChartId ? SAMPLE_CHARTS[sampleChartId] ?? null : null;
 
@@ -284,7 +314,7 @@ export default function ScorePage() {
 
   function switchTaskType(t: TaskType) {
     setTaskType(t);
-    setQuestion(SAMPLE_QUESTIONS[t][0].text);
+    setQuestion(QUESTIONS[t][0].text);
     setCustomQuestion(false);
     setEssay("");
     setResult(null);
@@ -480,7 +510,7 @@ export default function ScorePage() {
                   }
                 }}
               >
-                {SAMPLE_QUESTIONS[taskType].map((q) => (
+                {QUESTIONS[taskType].map((q) => (
                   <option key={q.id} value={q.text}>
                     {q.label}
                   </option>
