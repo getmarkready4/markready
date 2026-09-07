@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 /**
- * Shown when a founding user has spent both free tests.
+ * Shown when a user has spent today's free mark.
  *
  * There is no checkout yet — payment rails are a later step — so this records
  * interest only. It must not imply a working purchase.
@@ -34,13 +34,17 @@ export default function UpgradePage() {
 
       <div className="w-full max-w-md bg-white border border-[#E4DFD3] rounded-2xl p-8 text-center">
         <h1 className="font-serif text-xl font-semibold text-[#23282B] mb-3">
-          That&rsquo;s both free tests used
+          That&rsquo;s today&rsquo;s free mark used
         </h1>
 
+        <p className="text-sm text-[#5B6266] mb-2">
+          You get one free scored essay every day. Your next one unlocks at
+          midnight UTC.
+        </p>
         <p className="text-sm text-[#5B6266] mb-6">
-          You&rsquo;ve used the two scored essays that come with your founding place.
-          We&rsquo;re building an unlimited plan next &mdash; tell us you want it and
-          you&rsquo;ll be first to know, at the founding price.
+          Want more than one a day? We&rsquo;re building an unlimited plan next
+          &mdash; tell us you want it and you&rsquo;ll be first to know, at an
+          early-supporter price.
         </p>
 
         {state === "done" ? (

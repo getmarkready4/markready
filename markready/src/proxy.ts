@@ -37,7 +37,6 @@ export async function proxy(request: NextRequest) {
   const isApi = path.startsWith("/api/");
   const isLogin = path.startsWith("/login");
   const isWelcome = path.startsWith("/welcome");
-  const isWaitlist = path.startsWith("/waitlist");
   const isUpgrade = path.startsWith("/upgrade");
   const isAppRoute = path.startsWith("/score") || path.startsWith("/dashboard");
 
@@ -45,7 +44,7 @@ export async function proxy(request: NextRequest) {
     if (path.startsWith("/api/score")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (isAppRoute || isWelcome || isWaitlist || isUpgrade) {
+    if (isAppRoute || isWelcome || isUpgrade) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
     return supabaseResponse;
@@ -55,38 +54,28 @@ export async function proxy(request: NextRequest) {
   // profile lookup here so we don't add a round-trip to every scoring request.
   if (isApi) return supabaseResponse;
 
-  // Cohort gating. Quota exhaustion is deliberately NOT checked here: it needs
-  // a submissions count, and paying that on every page load isn't worth it.
+  // Onboarding gate. Quota is deliberately NOT checked here: it needs a
+  // submissions count, and paying that on every page load isn't worth it.
   // /api/score returns `quota_exhausted` and the client routes to /upgrade.
+  //
+  // A missing profile row (e.g. cleared during testing) is treated as
+  // not-yet-onboarded; /welcome recreates the row when the answer is saved.
   const { data: profile } = await supabase
     .from("profiles")
     .select("cohort, referral_source")
     .eq("id", user.id)
     .maybeSingle();
 
-  const cohort = profile?.cohort ?? "waitlist";
-  const needsOnboarding = cohort !== "staff" && !profile?.referral_source;
-
-  // Where this user belongs when they have no specific destination.
-  const home = needsOnboarding ? "/welcome" : cohort === "waitlist" ? "/waitlist" : "/score";
+  const needsOnboarding = profile?.cohort !== "staff" && !profile?.referral_source;
+  const home = needsOnboarding ? "/welcome" : "/score";
 
   if (isLogin) {
     return NextResponse.redirect(new URL(home, request.url));
   }
-
-  // Attribution is required before app access — including for waitlisted users,
-  // whose channel data is just as useful.
   if (needsOnboarding && !isWelcome) {
     return NextResponse.redirect(new URL("/welcome", request.url));
   }
   if (!needsOnboarding && isWelcome) {
-    return NextResponse.redirect(new URL(home, request.url));
-  }
-
-  if (cohort === "waitlist" && isAppRoute) {
-    return NextResponse.redirect(new URL("/waitlist", request.url));
-  }
-  if (cohort !== "waitlist" && isWaitlist) {
     return NextResponse.redirect(new URL("/score", request.url));
   }
 
@@ -102,7 +91,6 @@ export const config = {
     "/dashboard",
     "/dashboard/:path*",
     "/welcome",
-    "/waitlist",
     "/upgrade",
     "/api/score",
     "/api/score/:path*",

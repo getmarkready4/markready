@@ -1,16 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Free scored essays a founding-cohort user gets, lifetime. */
-export const FREE_TEST_LIMIT = 2;
+/** Free scored essays a regular user gets per UTC day. */
+export const DAILY_FREE_LIMIT = 1;
 
-export type Cohort = "founding" | "waitlist" | "staff";
+export type Cohort = "user" | "staff";
 
 export function isCohort(value: unknown): value is Cohort {
-  return value === "founding" || value === "waitlist" || value === "staff";
+  return value === "user" || value === "staff";
 }
 
 /**
- * Lifetime count of tests that have consumed quota for this user.
+ * Tests that have consumed today's quota for this user (UTC day).
  *
  * Counts:
  *   - completed scores (`scores is not null`)
@@ -22,19 +22,20 @@ export function isCohort(value: unknown): value is Cohort {
  * parallel requests and have every one pass the check before any of them
  * finished. Orphaned placeholders from crashed requests age out of the count
  * on their own, so no cleanup job is needed.
- *
- * Mirrors the daily-cap query in /api/score, minus the date floor.
  */
-export async function countUsedTests(
+export async function countUsedToday(
   service: SupabaseClient,
   userId: string
 ): Promise<number | null> {
+  const utcMidnight = new Date();
+  utcMidnight.setUTCHours(0, 0, 0, 0);
   const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
   const { count, error } = await service
     .from("submissions")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
+    .gte("created_at", utcMidnight.toISOString())
     .or(`scores.not.is.null,created_at.gte.${fiveMinAgo}`);
 
   if (error) {
@@ -45,8 +46,8 @@ export async function countUsedTests(
   return count ?? 0;
 }
 
-/** Remaining free tests for display. Staff are unlimited (null). */
-export function remainingTests(cohort: Cohort, used: number): number | null {
+/** Free marks left today, for display. Staff are unlimited (null). */
+export function remainingToday(cohort: Cohort, used: number): number | null {
   if (cohort === "staff") return null;
-  return Math.max(0, FREE_TEST_LIMIT - used);
+  return Math.max(0, DAILY_FREE_LIMIT - used);
 }

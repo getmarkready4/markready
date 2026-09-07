@@ -10,7 +10,7 @@ import type { ScoringResult, TaskType } from "@/types/scoring";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseScoringResult, extractJson } from "@/lib/parse-scoring";
-import { countUsedTests, isCohort, FREE_TEST_LIMIT, type Cohort } from "@/lib/quota";
+import { countUsedToday, isCohort, DAILY_FREE_LIMIT, type Cohort } from "@/lib/quota";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Releases the quota slot held by an in-flight submission. Never throws. */
@@ -133,14 +133,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Account suspended" }, { status: 403 });
   }
 
-  const cohort: Cohort = isCohort(profile?.cohort) ? profile.cohort : "waitlist";
+  // Unknown or missing cohort is a regular user: limited, never locked out,
+  // never staff.
+  const cohort: Cohort = isCohort(profile?.cohort) ? profile.cohort : "user";
 
-  if (cohort === "waitlist") {
-    return NextResponse.json(
-      { error: "You're on the waitlist", code: "waitlist" },
-      { status: 403 }
-    );
-  }
   if (cohort !== "staff" && !profile?.referral_source) {
     return NextResponse.json(
       { error: "Tell us how you found us first", code: "onboarding_incomplete" },
@@ -262,25 +258,26 @@ export async function POST(req: NextRequest) {
 
   const placeholderId = placeholder.id;
 
-  // Step 5 — Lifetime free-test quota (founding cohort only; staff unlimited).
+  // Step 5 — Daily free mark (one per UTC day; staff unlimited).
   // The count includes the placeholder just inserted, hence `>` not `>=`.
   let count: number | null = null;
 
   if (cohort !== "staff") {
-    count = await countUsedTests(serviceClient, user.id);
+    count = await countUsedToday(serviceClient, user.id);
 
     if (count === null) {
       await deletePlaceholder(serviceClient, placeholderId);
       return NextResponse.json({ error: "Unable to verify your usage" }, { status: 500 });
     }
 
-    if (count > FREE_TEST_LIMIT) {
+    if (count > DAILY_FREE_LIMIT) {
       await deletePlaceholder(serviceClient, placeholderId);
       return NextResponse.json(
         {
-          error: "You've used both free tests",
+          error: "You've used today's free mark",
           code: "quota_exhausted",
-          limit: FREE_TEST_LIMIT,
+          limit: DAILY_FREE_LIMIT,
+          reset: "midnight UTC",
         },
         { status: 403 }
       );
@@ -392,10 +389,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to save submission" }, { status: 500 });
   }
 
-  // Free tests left after this one. `count` already includes this submission;
-  // null means staff (unlimited).
+  // Free marks left today after this one. `count` already includes this
+  // submission; null means staff (unlimited).
   const remaining =
-    cohort === "staff" ? null : Math.max(0, FREE_TEST_LIMIT - (count ?? 0));
+    cohort === "staff" ? null : Math.max(0, DAILY_FREE_LIMIT - (count ?? 0));
 
   return NextResponse.json({ ...result, remaining });
 }

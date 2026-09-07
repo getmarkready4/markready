@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 /** Kept in sync with REFERRAL_SOURCES in /api/profile. */
 const SOURCES = [
@@ -16,7 +15,6 @@ const SOURCES = [
 ] as const;
 
 export default function WelcomePage() {
-  const router = useRouter();
   const [source, setSource] = useState<string>("");
   const [detail, setDetail] = useState("");
   const [saving, setSaving] = useState(false);
@@ -46,9 +44,11 @@ export default function WelcomePage() {
         return;
       }
 
-      // The proxy decides where this user belongs (scorer or waitlist).
-      router.push("/score");
-      router.refresh();
+      // A full navigation, not a client-side push. If the proxy decides this
+      // user still belongs on /welcome, a push would soft-navigate back onto
+      // this same component with `saving` still true and no way out; a real
+      // page load can never get stuck like that.
+      window.location.assign("/score");
     } catch {
       setError("Network error. Please try again.");
       setSaving(false);

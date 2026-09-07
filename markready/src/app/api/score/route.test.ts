@@ -23,7 +23,7 @@ let testContext = {
   profileError: false,
   // Lifetime tests already consumed (successful scores + in-flight placeholders)
   usedCount: 0,
-  cohort: "founding" as string | null,
+  cohort: "user" as string | null,
   referralSource: "reddit" as string | null,
   deletedIds: [] as string[],
   updatePayloads: [] as unknown[],
@@ -145,7 +145,7 @@ function validScoringJson(): ScoringResult {
 describe("POST /api/score", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    testContext = { isBanned: false, profileError: false, usedCount: 0, cohort: "founding", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false };
+    testContext = { isBanned: false, profileError: false, usedCount: 0, cohort: "user", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false };
     mockCreate.mockClear();
     mockGetUser.mockClear();
   });
@@ -228,11 +228,11 @@ describe("POST /api/score", () => {
       expect(res.status).toBe(500);
     });
 
-    it("returns 403 quota_exhausted when post-insert count exceeds the free limit and deletes placeholder", async () => {
+    it("returns 403 quota_exhausted when post-insert count exceeds today's free mark and deletes placeholder", async () => {
       // WHY: insert-then-count closes the race; the placeholder must not linger
-      // and burn a slot the user never actually spent
+      // and burn a mark the user never actually spent
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.usedCount = 3;
+      testContext.usedCount = 2;
       const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
       const res = await POST(req);
       expect(res.status).toBe(403);
@@ -241,11 +241,11 @@ describe("POST /api/score", () => {
       expect(testContext.deletedIds).toContain("ph-1");
     });
 
-    it("returns 200 when post-insert count equals the free limit", async () => {
-      // WHY: > 2 not >= 2 — the count includes this submission, so 2 means the
-      // user is spending their second and final free test right now
+    it("returns 200 when post-insert count equals today's limit", async () => {
+      // WHY: > 1 not >= 1 — the count includes this submission, so 1 means the
+      // user is spending today's single free mark right now
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.usedCount = 2;
+      testContext.usedCount = 1;
       mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
       const req = createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" });
       const res = await POST(req);
@@ -271,26 +271,16 @@ describe("POST /api/score", () => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
     });
 
-    it("returns 403 waitlist for the waitlist cohort before any LLM call", async () => {
-      // WHY: waitlisted users must never reach the scorer — and never cost us an
-      // OpenRouter call to find out
-      testContext.cohort = "waitlist";
-      const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
-      const res = await POST(req);
-      expect(res.status).toBe(403);
-      const data = await res.json() as Record<string, unknown>;
-      expect(data.code).toBe("waitlist");
-      expect(mockCreate).not.toHaveBeenCalled();
-    });
-
-    it("treats a missing/unknown cohort as waitlist", async () => {
-      // WHY: fail closed — a null cohort must not grant free scoring
+    it("treats a missing/unknown cohort as a limited user, never as staff", async () => {
+      // WHY: fail closed on privilege — a null cohort must not unlock unlimited
+      // scoring — but it must never lock anyone out either
       testContext.cohort = null;
+      testContext.usedCount = 2;
       const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
       const res = await POST(req);
       expect(res.status).toBe(403);
       const data = await res.json() as Record<string, unknown>;
-      expect(data.code).toBe("waitlist");
+      expect(data.code).toBe("quota_exhausted");
     });
 
     it("returns 403 onboarding_incomplete when attribution is missing", async () => {
@@ -394,7 +384,7 @@ describe("POST /api/score", () => {
       const data = await res.json() as Record<string, unknown>;
       expect(data.overall_band).toBe(6.5);
       expect(data.word_count).toBe(5);
-      expect(data.remaining).toBe(1);
+      expect(data.remaining).toBe(0);
       expect(testContext.updatePayloads[0]).toHaveProperty("overall_band", 6.5);
       expect(testContext.deletedIds).toEqual([]);
     });

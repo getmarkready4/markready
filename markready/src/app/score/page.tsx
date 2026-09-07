@@ -292,7 +292,7 @@ export default function ScorePage() {
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [imageDataUri, setImageDataUri] = useState<string | null>(null);
-  // Free tests left in the founding-cohort allowance. null = staff (unlimited).
+  // Free marks left today. null = staff (unlimited).
   const [remainingTests, setRemainingTests] = useState<number | null>(null);
   const [focusTip, setFocusTip] = useState<{ label: string; fix: string } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -394,10 +394,6 @@ export default function ScorePage() {
         // Cohort and quota gates — the destination page explains each case.
         if (data.code === "quota_exhausted") {
           router.push("/upgrade");
-          return;
-        }
-        if (data.code === "waitlist") {
-          router.push("/waitlist");
           return;
         }
         if (data.code === "onboarding_incomplete") {
@@ -724,8 +720,8 @@ export default function ScorePage() {
               {remainingTests !== null && (
                 <p className="text-xs text-[#5B6266] text-center">
                   {remainingTests === 0
-                    ? "That was your last free test."
-                    : `${remainingTests} free test${remainingTests === 1 ? "" : "s"} left.`}
+                    ? "That was today's free mark — your next one unlocks at midnight UTC."
+                    : `${remainingTests} free mark${remainingTests === 1 ? "" : "s"} left today.`}
                 </p>
               )}
             </div>
