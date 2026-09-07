@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import type { ScoringResult, TaskType, CriterionKey } from "@/types/scoring";
 import { MIN_WORDS, CRITERION_LABELS } from "@/types/scoring";
@@ -190,25 +190,42 @@ const SAMPLE_QUESTIONS: Record<TaskType, { id: string; label: string; text: stri
   ],
 };
 
-// Merges Cambridge-sourced questions with a randomly-selected subset from the
-// generated bank. Shuffled at module load so each page session gets a different
-// rotation of bank questions in the dropdown.
+// Cambridge-sourced questions plus a random rotation from the generated bank.
+//
+// The rotation is client-only. /score is prerendered, so anything random at
+// module load is baked into the HTML once at build time and then re-rolled in
+// the browser — a guaranteed hydration mismatch on every visit. Instead the
+// server (and the first client render, during hydration) see the deterministic
+// Cambridge list, and useSyncExternalStore swaps in the shuffled set straight
+// after. The client set is built once per page load and kept as a stable
+// reference, which that hook requires.
+//
+// Task 1 Academic deliberately takes nothing from the bank: none of those
+// questions has a chart, and a chart-description task without its chart cannot
+// be answered — the dropdown was offering eight dead ends.
 const BANK_PER_TYPE = 8;
 type Question = { id: string; label: string; text: string };
-const QUESTIONS: Record<TaskType, Question[]> = {
-  TASK2: [
-    ...SAMPLE_QUESTIONS.TASK2,
-    ...shuffled(questionBank.TASK2 as Question[]).slice(0, BANK_PER_TYPE),
-  ],
-  TASK1_ACADEMIC: [
-    ...SAMPLE_QUESTIONS.TASK1_ACADEMIC,
-    ...shuffled(questionBank.TASK1_ACADEMIC as Question[]).slice(0, BANK_PER_TYPE),
-  ],
-  TASK1_GENERAL: [
-    ...SAMPLE_QUESTIONS.TASK1_GENERAL,
-    ...shuffled(questionBank.TASK1_GENERAL as Question[]).slice(0, BANK_PER_TYPE),
-  ],
-};
+type QuestionSet = Record<TaskType, Question[]>;
+
+let clientQuestions: QuestionSet | null = null;
+function getClientQuestions(): QuestionSet {
+  if (!clientQuestions) {
+    clientQuestions = {
+      TASK2: [
+        ...SAMPLE_QUESTIONS.TASK2,
+        ...shuffled(questionBank.TASK2 as Question[]).slice(0, BANK_PER_TYPE),
+      ],
+      TASK1_ACADEMIC: [...SAMPLE_QUESTIONS.TASK1_ACADEMIC],
+      TASK1_GENERAL: [
+        ...SAMPLE_QUESTIONS.TASK1_GENERAL,
+        ...shuffled(questionBank.TASK1_GENERAL as Question[]).slice(0, BANK_PER_TYPE),
+      ],
+    };
+  }
+  return clientQuestions;
+}
+const getServerQuestions = (): QuestionSet => SAMPLE_QUESTIONS;
+const subscribeToNothing = () => () => {};
 
 const TASK_DESCRIPTIONS: Record<TaskType, string> = {
   TASK2: "Write an essay of at least 250 words responding to the prompt.",
@@ -257,8 +274,13 @@ async function downscaleImage(file: File): Promise<string> {
 
 export default function ScorePage() {
   const router = useRouter();
+  const questions = useSyncExternalStore(
+    subscribeToNothing,
+    getClientQuestions,
+    getServerQuestions
+  );
   const [taskType, setTaskType] = useState<TaskType>("TASK2");
-  const [question, setQuestion] = useState(QUESTIONS.TASK2[0].text);
+  const [question, setQuestion] = useState(SAMPLE_QUESTIONS.TASK2[0].text);
   const [customQuestion, setCustomQuestion] = useState(false);
   const [essay, setEssay] = useState("");
   // Snapshot of the text that produced `result`. Kept separate because the
@@ -288,36 +310,13 @@ export default function ScorePage() {
   // Which Task 1 Academic sample (if any) is currently selected, and its chart.
   const sampleChartId =
     taskType === "TASK1_ACADEMIC" && !customQuestion
-      ? QUESTIONS.TASK1_ACADEMIC.find((q) => q.text === question)?.id ?? null
+      ? questions.TASK1_ACADEMIC.find((q) => q.text === question)?.id ?? null
       : null;
   const SampleChart = sampleChartId ? SAMPLE_CHARTS[sampleChartId] ?? null : null;
 
-  // When a sample chart is shown, rasterize it and feed it to scoring exactly
-  // like an uploaded image. Leaving a sample (task-type switch or "use my own
-  // question") clears imageDataUri in those handlers, not here.
-  useEffect(() => {
-    if (!SampleChart) return;
-    let cancelled = false;
-    const svg = chartWrapperRef.current?.querySelector("svg");
-    if (svg) {
-      svgToDataUri(svg as unknown as SVGSVGElement)
-        .then((uri) => {
-          if (!cancelled) setImageDataUri(uri);
-        })
-        .catch(() => {
-          // Rasterization failed — leave the image unset; the response can
-          // still be scored for structure and language without data accuracy.
-        });
-    }
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sampleChartId]);
-
   function switchTaskType(t: TaskType) {
     setTaskType(t);
-    setQuestion(QUESTIONS[t][0].text);
+    setQuestion(questions[t][0].text);
     setCustomQuestion(false);
     setEssay("");
     setResult(null);
@@ -350,6 +349,29 @@ export default function ScorePage() {
   async function handleScore() {
     setError(null);
     setResult(null);
+
+    // The chart is rasterized at submit time from the SVG on screen, never
+    // held in state for sample questions. State went stale after "Score
+    // another" cleared it while the same question stayed selected, and every
+    // repeat attempt was then scored without the chart the candidate could see.
+    let image: string | null = null;
+    if (taskType === "TASK1_ACADEMIC") {
+      if (SampleChart) {
+        const svg = chartWrapperRef.current?.querySelector("svg");
+        try {
+          if (!svg) throw new Error("chart not rendered");
+          image = await svgToDataUri(svg as unknown as SVGSVGElement);
+        } catch {
+          // The page has just promised the candidate the chart will be
+          // included. Scoring without it would make that untrue, so stop.
+          setError("Could not attach the chart. Please try again.");
+          return;
+        }
+      } else {
+        image = imageDataUri;
+      }
+    }
+
     setLoading(true);
     setLoadingMsg(0);
 
@@ -361,7 +383,7 @@ export default function ScorePage() {
       const res = await fetch("/api/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, essay, taskType, image: taskType === "TASK1_ACADEMIC" ? imageDataUri : null }),
+        body: JSON.stringify({ question, essay, taskType, image }),
       });
       if (res.status === 401) {
         router.push("/login");
@@ -514,7 +536,7 @@ export default function ScorePage() {
                   }
                 }}
               >
-                {QUESTIONS[taskType].map((q) => (
+                {questions[taskType].map((q) => (
                   <option key={q.id} value={q.text}>
                     {q.label}
                   </option>
