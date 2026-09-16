@@ -13,6 +13,12 @@ export async function proxy(request: NextRequest) {
   }
 
   let supabaseResponse = NextResponse.next({ request });
+  const cacheHeaders = new Headers();
+  function refreshed(response: NextResponse) {
+    supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+    cacheHeaders.forEach((value, name) => response.headers.set(name, value));
+    return response;
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,12 +26,18 @@ export async function proxy(request: NextRequest) {
     {
       cookies: {
         getAll: () => request.cookies.getAll(),
-        setAll: (toSet) => {
+        setAll: (toSet, headers) => {
           toSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = refreshed(NextResponse.next({ request }));
           toSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
+          Object.entries(headers).forEach(([name, value]) => {
+            if (["cache-control", "expires", "pragma"].includes(name.toLowerCase())) {
+              cacheHeaders.set(name, value);
+              supabaseResponse.headers.set(name, value);
+            }
+          });
         },
       },
     }
@@ -42,10 +54,10 @@ export async function proxy(request: NextRequest) {
 
   if (!user) {
     if (path.startsWith("/api/score")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return refreshed(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
     }
     if (isAppRoute || isWelcome || isUpgrade) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return refreshed(NextResponse.redirect(new URL("/login", request.url)));
     }
     return supabaseResponse;
   }
@@ -56,7 +68,7 @@ export async function proxy(request: NextRequest) {
 
   // Onboarding gate. Quota is deliberately NOT checked here: it needs a
   // submissions count, and paying that on every page load isn't worth it.
-  // /api/score returns `quota_exhausted` and the client routes to /upgrade.
+  // /api/score returns `quota_exhausted` and the client keeps the draft visible.
   //
   // A missing profile row (e.g. cleared during testing) is treated as
   // not-yet-onboarded; /welcome recreates the row when the answer is saved.
@@ -70,13 +82,13 @@ export async function proxy(request: NextRequest) {
   const home = needsOnboarding ? "/welcome" : "/score";
 
   if (isLogin) {
-    return NextResponse.redirect(new URL(home, request.url));
+    return refreshed(NextResponse.redirect(new URL(home, request.url)));
   }
   if (needsOnboarding && !isWelcome) {
-    return NextResponse.redirect(new URL("/welcome", request.url));
+    return refreshed(NextResponse.redirect(new URL("/welcome", request.url)));
   }
   if (!needsOnboarding && isWelcome) {
-    return NextResponse.redirect(new URL("/score", request.url));
+    return refreshed(NextResponse.redirect(new URL("/score", request.url)));
   }
 
   return supabaseResponse;

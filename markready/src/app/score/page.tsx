@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useSyncExternalStore } from "react";
+import { useState, useRef, useEffect, useCallback, useSyncExternalStore } from "react";
 import Link from "next/link";
 import type { ScoringResult, TaskType, CriterionKey } from "@/types/scoring";
 import { MIN_WORDS, CRITERION_LABELS } from "@/types/scoring";
@@ -11,6 +11,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { SAMPLE_CHARTS } from "@/components/task1-charts";
 import { svgToDataUri } from "@/components/task1-charts/svgToDataUri";
 import questionBank from "@/data/question-bank.json";
+import { readScoreDrafts, writeScoreDrafts, type ScoreDraft, type ScoreDrafts } from "@/lib/score-drafts";
 
 function shuffled<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -273,36 +274,154 @@ async function downscaleImage(file: File): Promise<string> {
 }
 
 export default function ScorePage() {
+  const [account, setAccount] = useState<{ id: string; email?: string; generation: number } | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const identity = useRef<{ id: string | null; generation: number }>({ id: null, generation: 0 });
+
+  useEffect(() => {
+    let alive = true;
+    let events = 0;
+    const applyUser = (user: { id: string; email?: string } | null) => {
+      if (!alive) return;
+      if (identity.current.id !== (user?.id ?? null)) {
+        identity.current = { id: user?.id ?? null, generation: identity.current.generation + 1 };
+      }
+      setAccount(user ? { ...user, generation: identity.current.generation } : null);
+      setAuthReady(true);
+    };
+    const client = createClient();
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+      events++;
+      applyUser(session?.user ?? null);
+    });
+    const initialEvents = events;
+    void client.auth.getUser().then(({ data: { user } }) => {
+      if (events === initialEvents) applyUser(user);
+    }).catch(() => {
+      if (events === initialEvents) applyUser(null);
+    });
+    return () => {
+      alive = false;
+      identity.current = { id: null, generation: identity.current.generation + 1 };
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const generation = account?.generation;
+  const isCurrent = useCallback(() => identity.current.id !== null && identity.current.generation === generation, [generation]);
+  if (!account) return (
+    <main className="max-w-3xl mx-auto px-4 py-10">
+      {authReady ? <p>Sign in to restore your draft. <Link href="/login" className="underline">Sign in</Link></p> : <p>Checking your account…</p>}
+    </main>
+  );
+  return <AccountScorePage key={account.generation} userId={account.id} userEmail={account.email ?? null} isCurrent={isCurrent} />;
+}
+
+type Allowance = {
+  cohort: string;
+  remaining: number | null;
+  used_successful: number;
+  active: boolean;
+  lease_expires_at: string | null;
+  reset_at: string;
+};
+
+function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; userEmail: string | null; isCurrent: () => boolean }) {
   const router = useRouter();
   const questions = useSyncExternalStore(
     subscribeToNothing,
     getClientQuestions,
     getServerQuestions
   );
-  const [taskType, setTaskType] = useState<TaskType>("TASK2");
-  const [question, setQuestion] = useState(SAMPLE_QUESTIONS.TASK2[0].text);
-  const [customQuestion, setCustomQuestion] = useState(false);
-  const [essay, setEssay] = useState("");
-  // Snapshot of the text that produced `result`. Kept separate because the
-  // editor is cleared on "Score another" while the report is still on screen.
+  const [restored] = useState(() => readScoreDrafts(userId));
+  const [drafts, setDrafts] = useState(restored.value);
+  const [storageWarning, setStorageWarning] = useState(restored.warning);
+  const draftsRef = useRef(drafts);
+  const taskType = drafts.taskType;
+  const { question, customQuestion, essay, imageDataUri } = drafts.drafts[taskType] ?? {
+    question: SAMPLE_QUESTIONS[taskType][0].text, customQuestion: false, essay: "", imageDataUri: null,
+  };
+  // Keep the submitted text separate from subsequent draft edits.
   const [scoredEssay, setScoredEssay] = useState("");
   const [loading, setLoading] = useState(false);
+  const [processingImage, setProcessingImage] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(0);
   const [result, setResult] = useState<ScoringResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [imageDataUri, setImageDataUri] = useState<string | null>(null);
-  // Free marks left today. null = staff (unlimited).
-  const [remainingTests, setRemainingTests] = useState<number | null>(null);
+  const [allowance, setAllowance] = useState<Allowance | null>(null);
+  const [allowanceState, setAllowanceState] = useState<"loading" | "ready" | "error">("loading");
   const [focusTip, setFocusTip] = useState<{ label: string; fix: string } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chartWrapperRef = useRef<HTMLDivElement>(null);
+  const submitting = useRef(false);
+  const imageGeneration = useRef(0);
+  const imageProcessing = useRef(false);
+  const profileRequest = useRef(0);
+  const mounted = useRef(false);
+
+  const current = useCallback(() => mounted.current && isCurrent(), [isCurrent]);
+  const refreshAllowance = useCallback(async () => {
+    if (!current()) return;
+    const request = ++profileRequest.current;
+    try {
+      const response = await fetch("/api/profile", { cache: "no-store" });
+      const data = await response.json();
+      if (!current() || request !== profileRequest.current) return;
+      if (!response.ok || !data || typeof data.cohort !== "string" ||
+          (data.user_id !== undefined && data.user_id !== userId) ||
+          !(data.cohort === "staff" ? data.remaining === null : Number.isInteger(data.remaining) && data.remaining >= 0) ||
+          !Number.isInteger(data.used_successful) || data.used_successful < 0 ||
+          typeof data.active !== "boolean" ||
+          !(data.lease_expires_at === null || (typeof data.lease_expires_at === "string" && Number.isFinite(Date.parse(data.lease_expires_at)))) ||
+          (data.active && data.lease_expires_at === null) ||
+          typeof data.reset_at !== "string" || !Number.isFinite(Date.parse(data.reset_at))) throw new Error("Invalid allowance");
+      setAllowance(data);
+      setAllowanceState("ready");
+    } catch {
+      if (current() && request === profileRequest.current) setAllowanceState("error");
+    }
+  }, [current, userId]);
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
-      setUserEmail(user?.email ?? null);
-    });
-  }, []);
+    mounted.current = true;
+    queueMicrotask(() => { void refreshAllowance(); });
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        setAllowanceState("loading");
+        void refreshAllowance();
+      }
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      mounted.current = false;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [refreshAllowance]);
+
+  useEffect(() => {
+    if (!allowance || allowanceState !== "ready") return;
+    const deadline = Math.min(Date.parse(allowance.reset_at), allowance.active && allowance.lease_expires_at ? Date.parse(allowance.lease_expires_at) : Infinity);
+    const timer = setTimeout(() => { setAllowanceState("loading"); void refreshAllowance(); }, Math.max(1000, deadline - Date.now() + 100));
+    return () => clearTimeout(timer);
+  }, [allowance, allowanceState, refreshAllowance]);
+
+  function saveDrafts(next: ScoreDrafts) {
+    if (!current()) return;
+    draftsRef.current = next;
+    setDrafts(next);
+    setStorageWarning(writeScoreDrafts(userId, next));
+  }
+
+  function updateDraft(change: Partial<ScoreDraft>) {
+    const value = draftsRef.current;
+    const draft = value.drafts[value.taskType] ?? { question: SAMPLE_QUESTIONS[value.taskType][0].text, customQuestion: false, essay: "", imageDataUri: null };
+    saveDrafts({ ...value, drafts: { ...value.drafts, [value.taskType]: { ...draft, ...change } } });
+  }
+
+  const canScore = allowanceState === "ready" && !!allowance && (allowance.cohort === "staff" || (!allowance.active && (allowance.remaining ?? 0) > 0));
 
   const minWords = MIN_WORDS[taskType];
   const wordCount = essay.trim() ? essay.trim().split(/\s+/).length : 0;
@@ -314,21 +433,25 @@ export default function ScorePage() {
       : null;
   const SampleChart = sampleChartId ? SAMPLE_CHARTS[sampleChartId] ?? null : null;
 
+  function setImageProcessing(value: boolean) {
+    imageProcessing.current = value;
+    setProcessingImage(value);
+  }
+
   function switchTaskType(t: TaskType) {
-    setTaskType(t);
-    setQuestion(questions[t][0].text);
-    setCustomQuestion(false);
-    setEssay("");
+    imageGeneration.current++;
+    setImageProcessing(false);
+    saveDrafts({ ...draftsRef.current, taskType: t });
     setResult(null);
     setError(null);
-    setImageDataUri(null);
-    setRemainingTests(null);
     setFocusTip(null);
   }
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const generation = ++imageGeneration.current;
+    setImageProcessing(false);
     const ALLOWED = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
     if (!ALLOWED.includes(file.type)) {
       setError("Please attach a PNG, JPEG, or WebP image.");
@@ -338,17 +461,27 @@ export default function ScorePage() {
       setError("Image must be under 10 MB.");
       return;
     }
+    setError(null);
+    setImageProcessing(true);
     try {
       const dataUri = await downscaleImage(file);
-      setImageDataUri(dataUri);
+      if (current() && generation === imageGeneration.current) updateDraft({ imageDataUri: dataUri });
     } catch {
-      setError("Could not process image. Please try another file.");
+      if (current() && generation === imageGeneration.current) setError("Could not process image. Please try another file.");
+    } finally {
+      if (current() && generation === imageGeneration.current) setImageProcessing(false);
     }
   }
 
   async function handleScore() {
+    if (!current() || submitting.current || imageProcessing.current || !canScore || !essay.trim() || !question.trim()) return;
+    submitting.current = true;
+    imageGeneration.current++;
     setError(null);
     setResult(null);
+    // Capture the SVG before loading removes the editor, and lock before conversion.
+    const svg = chartWrapperRef.current?.querySelector("svg");
+    setLoading(true);
 
     // The chart is rasterized at submit time from the SVG on screen, never
     // held in state for sample questions. State went stale after "Score
@@ -357,14 +490,17 @@ export default function ScorePage() {
     let image: string | null = null;
     if (taskType === "TASK1_ACADEMIC") {
       if (SampleChart) {
-        const svg = chartWrapperRef.current?.querySelector("svg");
         try {
           if (!svg) throw new Error("chart not rendered");
           image = await svgToDataUri(svg as unknown as SVGSVGElement);
         } catch {
           // The page has just promised the candidate the chart will be
           // included. Scoring without it would make that untrue, so stop.
-          setError("Could not attach the chart. Please try again.");
+          if (current()) {
+            setError("Could not attach the chart. Please try again.");
+            submitting.current = false;
+            setLoading(false);
+          }
           return;
         }
       } else {
@@ -372,7 +508,7 @@ export default function ScorePage() {
       }
     }
 
-    setLoading(true);
+    if (!current()) return;
     setLoadingMsg(0);
 
     intervalRef.current = setInterval(() => {
@@ -385,15 +521,20 @@ export default function ScorePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, essay, taskType, image }),
       });
+      if (!current()) return;
       if (res.status === 401) {
-        router.push("/login");
+        setError("Your session expired. Sign in again to restore this account’s draft.");
         return;
       }
       const data = await res.json();
+      if (!current()) return;
+      if (res.status === 409 && data.code === "request_active") {
+        setError("A response is already being scored. Your draft is kept here; check your progress or wait for the current request to finish.");
+        return;
+      }
       if (res.status === 403) {
-        // Cohort and quota gates — the destination page explains each case.
         if (data.code === "quota_exhausted") {
-          router.push("/upgrade");
+          setError("Today’s free mark has been used. You can keep editing this draft and review your progress.");
           return;
         }
         if (data.code === "onboarding_incomplete") {
@@ -418,16 +559,19 @@ export default function ScorePage() {
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Please try again.");
       } else {
-        const remaining = typeof data.remaining === "number" ? data.remaining : null;
-        setRemainingTests(remaining);
         setScoredEssay(essay);
         setResult(data);
       }
     } catch {
-      setError("Network error. Please check your connection and try again.");
+      if (current()) setError("Network error. Please check your connection and try again.");
     } finally {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      setLoading(false);
+      if (current()) {
+        submitting.current = false;
+        setLoading(false);
+        setAllowanceState("loading");
+        void refreshAllowance();
+      }
     }
   }
 
@@ -448,6 +592,17 @@ export default function ScorePage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-10 space-y-8">
+        {storageWarning && <p role="alert" className="text-sm text-amber-800">{storageWarning}</p>}
+        <div role="status" className="text-sm text-[#5B6266] space-y-2">
+          {allowanceState === "loading" ? <p>Checking today’s scoring allowance…</p> : allowanceState === "error" ? (
+            <p>Could not check your scoring allowance. Your draft is still editable. <button onClick={() => { setAllowanceState("loading"); void refreshAllowance(); }} className="underline">Retry allowance check</button></p>
+          ) : allowance && (
+            <p>{allowance.cohort === "staff" ? "Staff: unlimited scoring." : allowance.active ? "A response is already being scored. You can keep drafting while it finishes." : allowance.remaining === 0 ? "Today’s free mark is used. Keep drafting or review your progress." : `${allowance.remaining} free mark left today.`}
+              {allowance.cohort !== "staff" && <> Next daily reset: <time dateTime={allowance.reset_at}>{new Date(allowance.reset_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time> (your local time).</>}
+            </p>
+          )}
+          <p>Drafts are kept in this browser tab for your account. Switching tasks keeps each draft.</p>
+        </div>
         {/* Input */}
         {!result && !loading && (
           <>
@@ -521,17 +676,16 @@ export default function ScorePage() {
                 className="w-full border border-[#E4DFD3] rounded-xl px-4 py-3 text-sm bg-white text-[#23282B] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30"
                 value={customQuestion ? "__custom__" : question}
                 onChange={(e) => {
+                  imageGeneration.current++;
+                  setImageProcessing(false);
                   if (e.target.value === "__custom__") {
-                    setCustomQuestion(true);
-                    setQuestion("");
-                    // Drop any auto-fed sample chart; custom questions use upload.
-                    setImageDataUri(null);
+                    updateDraft({ customQuestion: true, question: "", imageDataUri: null });
                   } else {
-                    setCustomQuestion(false);
-                    setQuestion(e.target.value);
+                    updateDraft({ customQuestion: false, question: e.target.value, imageDataUri: null });
                   }
                 }}
               >
+                {!customQuestion && !questions[taskType].some((q) => q.text === question) && <option value={question}>Restored question</option>}
                 {questions[taskType].map((q) => (
                   <option key={q.id} value={q.text}>
                     {q.label}
@@ -549,7 +703,7 @@ export default function ScorePage() {
                   rows={4}
                   placeholder="Paste your question or prompt here…"
                   value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
+                  onChange={(e) => updateDraft({ question: e.target.value })}
                 />
               )}
             </div>
@@ -584,7 +738,7 @@ export default function ScorePage() {
                       <img src={imageDataUri} alt="Attached chart" className="max-h-48 rounded" />
                       <button
                         type="button"
-                        onClick={() => setImageDataUri(null)}
+                        onClick={() => { imageGeneration.current++; setImageProcessing(false); updateDraft({ imageDataUri: null }); }}
                         className="text-sm px-3 py-2 rounded-lg border border-[#E4DFD3] text-[#23282B] hover:bg-[#F2EEE5] transition-colors"
                       >
                         Remove
@@ -630,19 +784,21 @@ export default function ScorePage() {
                       : "Paste or type your essay here…"
                 }
                 value={essay}
-                onChange={(e) => setEssay(e.target.value)}
+                onChange={(e) => updateDraft({ essay: e.target.value })}
               />
             </div>
 
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
+                {error.includes("session expired") && <> <Link href="/login" className="underline">Sign in</Link></>}
               </div>
             )}
 
+            {processingImage && <p role="status" className="text-sm text-[#5B6266]">Preparing your chart. Scoring will be available when it is ready.</p>}
             <button
               onClick={handleScore}
-              disabled={!essay.trim() || !question.trim()}
+              disabled={loading || processingImage || !canScore || !essay.trim() || !question.trim()}
               className="w-full py-4 rounded-xl bg-[#1F5C4E] text-white font-semibold text-base hover:bg-[#154136] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Get my band score
@@ -669,9 +825,6 @@ export default function ScorePage() {
           const startNext = (focus: boolean) => {
             setResult(null);
             setError(null);
-            setEssay("");
-            setImageDataUri(null);
-            setRemainingTests(null);
             setFocusTip(focus && topFix ? { label: weakestLabel, fix: topFix } : null);
             window.scrollTo({ top: 0, behavior: "smooth" });
           };
@@ -700,14 +853,14 @@ export default function ScorePage() {
                 onClick={() => startNext(true)}
                 className="w-full py-4 rounded-xl bg-[#1F5C4E] text-white font-semibold text-sm hover:bg-[#154136] transition-colors"
               >
-                Practice again — focus on {weakestLabel}
+                Revise this draft - focus on {weakestLabel}
               </button>
               <div className="flex items-center justify-center gap-4">
                 <button
                   onClick={() => startNext(false)}
                   className="text-sm text-[#5B6266] hover:text-[#23282B] hover:underline"
                 >
-                  Score a different essay
+                  Return to my drafts
                 </button>
                 <span className="text-[#E4DFD3]">·</span>
                 <Link
@@ -717,13 +870,6 @@ export default function ScorePage() {
                   See my progress
                 </Link>
               </div>
-              {remainingTests !== null && (
-                <p className="text-xs text-[#5B6266] text-center">
-                  {remainingTests === 0
-                    ? "That was today's free mark — your next one unlocks at midnight UTC."
-                    : `${remainingTests} free mark${remainingTests === 1 ? "" : "s"} left today.`}
-                </p>
-              )}
             </div>
           </div>
           );

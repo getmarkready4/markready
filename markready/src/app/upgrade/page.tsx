@@ -34,12 +34,12 @@ export default function UpgradePage() {
 
       <div className="w-full max-w-md bg-white border border-[#E4DFD3] rounded-2xl p-8 text-center">
         <h1 className="font-serif text-xl font-semibold text-[#23282B] mb-3">
-          That&rsquo;s today&rsquo;s free mark used
+          Keep practising between daily marks
         </h1>
 
         <p className="text-sm text-[#5B6266] mb-2">
           You get one free scored essay every day. Your next one unlocks at
-          midnight UTC.
+          midnight UTC. Your score page shows the reset in your local time.
         </p>
         <p className="text-sm text-[#5B6266] mb-6">
           Want more than one a day? We&rsquo;re building an unlimited plan next
@@ -74,6 +74,7 @@ export default function UpgradePage() {
             dashboard
           </Link>
           .
+          {" "}<Link href="/score" className="text-[#23282B] underline">Return to your drafts</Link> to keep writing before the next mark.
         </p>
       </div>
     </div>

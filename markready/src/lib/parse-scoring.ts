@@ -1,4 +1,4 @@
-import type { ScoringResult, CriterionKey, Weakness, VocabUpgrade } from "@/types/scoring";
+import type { ScoringResult, CriterionKey, Weakness, VocabUpgrade, TaskType } from "@/types/scoring";
 
 export function extractJson(raw: string): string {
   // First try: strip fences
@@ -19,7 +19,7 @@ export function extractJson(raw: string): string {
   }
 }
 
-export function parseScoringResult(raw: string): ScoringResult | null {
+export function parseScoringResult(raw: string, taskType: TaskType = "TASK2"): ScoringResult | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(extractJson(raw));
@@ -40,13 +40,18 @@ export function parseScoringResult(raw: string): ScoringResult | null {
   }
 
   const processedCriteria: Record<string, { band: number; strengths_noted: string; rationale: string }> = {};
-  let hasValidCriteria = false;
+  const expectedKeys: CriterionKey[] = [
+    taskType === "TASK2" ? "task_response" : "task_achievement",
+    "coherence_cohesion", "lexical_resource", "grammatical_range_accuracy",
+  ];
+  if (Object.keys(criteria).length !== 4 ||
+      !expectedKeys.every((key) => Object.hasOwn(criteria, key))) return null;
 
   for (const [key, value] of Object.entries(criteria)) {
     if (typeof value === "object" && value !== null) {
       const v = value as Record<string, unknown>;
-      const band = typeof v.band === "number" && Number.isFinite(v.band)
-        ? Math.max(1, Math.min(9, v.band))
+      const band = typeof v.band === "number" && Number.isFinite(v.band) && v.band >= 1 && v.band <= 9
+        ? v.band
         : undefined;
       if (band !== undefined) {
         processedCriteria[key] = {
@@ -54,12 +59,11 @@ export function parseScoringResult(raw: string): ScoringResult | null {
           strengths_noted: typeof v.strengths_noted === "string" ? v.strengths_noted : "",
           rationale: typeof v.rationale === "string" ? v.rationale : "",
         };
-        hasValidCriteria = true;
       }
     }
   }
 
-  if (!hasValidCriteria) {
+  if (Object.keys(processedCriteria).length !== 4) {
     return null;
   }
 
@@ -132,15 +136,8 @@ export function parseScoringResult(raw: string): ScoringResult | null {
   };
 
   // Validate/replace weakest_criterion
-  const VALID_KEYS: CriterionKey[] = [
-    "task_response",
-    "task_achievement",
-    "coherence_cohesion",
-    "lexical_resource",
-    "grammatical_range_accuracy",
-  ];
   let weakestCriterion = obj.weakest_criterion as string;
-  if (!VALID_KEYS.includes(weakestCriterion as CriterionKey)) {
+  if (!expectedKeys.includes(weakestCriterion as CriterionKey)) {
     // Fallback: pick the lowest-band criterion key
     let lowestKey: CriterionKey | null = null;
     let lowestBand = Infinity;

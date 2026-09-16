@@ -21,8 +21,16 @@ vi.mock("@/lib/supabase/server", () => ({
 let testContext = {
   isBanned: false,
   profileError: false,
-  // Lifetime tests already consumed (successful scores + in-flight placeholders)
+  // Completed marks today; active leases are a separate database state.
   usedCount: 0,
+  active: false,
+  reservationError: false,
+  usageError: false,
+  completionError: false,
+  recoveryError: false,
+  releaseError: false,
+  completionRejected: false,
+  recoveredScores: null as ScoringResult | null,
   cohort: "user" as string | null,
   referralSource: "reddit" as string | null,
   deletedIds: [] as string[],
@@ -81,6 +89,30 @@ vi.mock("@/lib/supabase/service", () => ({
       } as ChainMethod,
     };
     return {
+      rpc: vi.fn((name: string, args: Record<string, unknown>) => ({
+        abortSignal: async () => {
+          const usage = { used_successful: testContext.usedCount, active: testContext.active, lease_expires_at: testContext.active ? "2026-09-14T23:59:00Z" : null, reset_at: "2026-09-15T00:00:00Z" };
+          if (name === "reserve_scoring") {
+            if (testContext.reservationError) return { data: null, error: { message: "function missing" } };
+            return { error: null, data: testContext.cohort !== "staff" && testContext.active
+              ? { ...usage, code: "request_active" }
+              : testContext.cohort !== "staff" && testContext.usedCount >= 1
+                ? { ...usage, code: "quota_exhausted" } : { ...usage, id: "ph-1" } };
+          }
+          if (name === "complete_scoring") {
+            if (testContext.completionError) throw new Error("lost completion response");
+            if (testContext.completionRejected) return { data: { code: "reservation_expired" }, error: null };
+            testContext.updatePayloads.push({ scores: args.p_scores, overall_band: args.p_overall_band });
+            testContext.usedCount++;
+            return { data: { submission: { scores: args.p_scores } }, error: null };
+          }
+          if (name === "release_scoring") {
+            testContext.deletedIds.push(String(args.p_id));
+            return { data: true, error: testContext.releaseError ? { message: "offline" } : null };
+          }
+          return { data: usage, error: testContext.usageError ? { message: "usage unavailable" } : null };
+        },
+      })),
       from: vi.fn((table: string) => {
         if (table === "profiles") {
           return {
@@ -113,7 +145,11 @@ vi.mock("@/lib/supabase/service", () => ({
             })),
           };
         }
-        return createChain;
+        return { ...createChain,
+          abortSignal() { return this; },
+          maybeSingle: async () => ({ data: testContext.recoveredScores ? { scores: testContext.recoveredScores } : null,
+            error: testContext.recoveryError ? { message: "offline" } : null }),
+        };
       }),
     };
   }),
@@ -145,12 +181,20 @@ function validScoringJson(): ScoringResult {
 describe("POST /api/score", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    testContext = { isBanned: false, profileError: false, usedCount: 0, cohort: "user", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false };
+    testContext = { isBanned: false, profileError: false, usedCount: 0, active: false,
+      reservationError: false, usageError: false, completionError: false, recoveryError: false, releaseError: false,
+      completionRejected: false, recoveredScores: null,
+      cohort: "user", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false };
     mockCreate.mockClear();
     mockGetUser.mockClear();
   });
 
   describe("Auth & Validation", () => {
+    it.each([null, [], 3])("returns 400 for non-object request body %s", async (body) => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+      expect((await POST(createRequest(body))).status).toBe(400);
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
     it("returns 400 when JSON body is malformed", async () => {
       // WHY: previously an unhandled 500
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
@@ -228,9 +272,7 @@ describe("POST /api/score", () => {
       expect(res.status).toBe(500);
     });
 
-    it("returns 403 quota_exhausted when post-insert count exceeds today's free mark and deletes placeholder", async () => {
-      // WHY: insert-then-count closes the race; the placeholder must not linger
-      // and burn a mark the user never actually spent
+    it("refuses a spent mark before inserting a reservation or calling the model", async () => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
       testContext.usedCount = 2;
       const req = createRequest({ question: "Q?", essay: "Essay", taskType: "TASK2" });
@@ -238,14 +280,13 @@ describe("POST /api/score", () => {
       expect(res.status).toBe(403);
       const data = await res.json() as Record<string, unknown>;
       expect(data.code).toBe("quota_exhausted");
-      expect(testContext.deletedIds).toContain("ph-1");
+      expect(testContext.deletedIds).toEqual([]);
+      expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it("returns 200 when post-insert count equals today's limit", async () => {
-      // WHY: > 1 not >= 1 — the count includes this submission, so 1 means the
-      // user is spending today's single free mark right now
+    it("allows the first mark of the UTC day", async () => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.usedCount = 1;
+      testContext.usedCount = 0;
       mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
       const req = createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" });
       const res = await POST(req);
@@ -309,7 +350,7 @@ describe("POST /api/score", () => {
   describe("Retry Loop & Cleanup", () => {
     beforeEach(() => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.usedCount = 1;
+      testContext.usedCount = 0;
     });
 
     it("returns 500 when mockCreate returns unparseable content twice and deletes placeholder", async () => {
@@ -370,7 +411,7 @@ describe("POST /api/score", () => {
   describe("Success Path", () => {
     beforeEach(() => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.usedCount = 1;
+      testContext.usedCount = 0;
     });
 
     it("returns 200 with server-computed overall_band and word_count", async () => {
@@ -385,8 +426,68 @@ describe("POST /api/score", () => {
       expect(data.overall_band).toBe(6.5);
       expect(data.word_count).toBe(5);
       expect(data.remaining).toBe(0);
+      expect(data).toMatchObject({ used_successful: 1, active: false, lease_expires_at: null, reset_at: "2026-09-15T00:00:00Z" });
       expect(testContext.updatePayloads[0]).toHaveProperty("overall_band", 6.5);
       expect(testContext.deletedIds).toEqual([]);
+    });
+  });
+
+  describe("Reservation failures", () => {
+    beforeEach(() => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+      mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
+    });
+    const request = () => createRequest({ question: "Q?", essay: "An essay", taskType: "TASK2" });
+    it("distinguishes active work from a spent mark without another model call", async () => {
+      testContext.active = true;
+      const res = await POST(request());
+      expect(res.status).toBe(409);
+      expect((await res.json()).code).toBe("request_active");
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+    it("fails closed when the migration is unavailable", async () => {
+      testContext.reservationError = true;
+      expect((await POST(request())).status).toBe(503);
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+    it("rejects partial Band 9 output on both attempts and releases the reservation", async () => {
+      mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ ...validScoringJson(), criteria: { task_response: { band: 9 } } }) } }] });
+      expect((await POST(request())).status).toBe(500);
+      expect(mockCreate).toHaveBeenCalledTimes(2);
+      expect(testContext.deletedIds).toEqual(["ph-1"]);
+      expect(testContext.updatePayloads).toEqual([]);
+    });
+    it("recovers a committed result after a lost completion response without deleting it", async () => {
+      testContext.completionError = true;
+      testContext.recoveredScores = { ...validScoringJson(), overall_band: 7 };
+      const res = await POST(request());
+      expect(res.status).toBe(200);
+      expect((await res.json()).overall_band).toBe(7);
+      expect(testContext.deletedIds).toEqual([]);
+    });
+    it("preserves the saved score when allowance refresh fails, without implying unlimited scoring", async () => {
+      testContext.usageError = true;
+      const res = await POST(request());
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({ overall_band: 6.5, allowance_unavailable: true, user_id: "user-1" });
+      expect(body).not.toHaveProperty("remaining");
+      expect(body).not.toHaveProperty("error");
+      expect(testContext.updatePayloads).toHaveLength(1);
+      expect(testContext.deletedIds).toEqual([]);
+    });
+    it.each(["completionError", "completionRejected"] as const)("conditionally releases unfinished work on %s", async (failure) => {
+      testContext[failure] = true;
+      const res = await POST(request());
+      expect(res.status).toBe(503);
+      expect((await res.json()).overall_band).toBeUndefined();
+      expect(testContext.deletedIds).toEqual(["ph-1"]);
+    });
+    it("reports an uncertain outcome when both recovery and release are unavailable", async () => {
+      testContext.completionError = testContext.recoveryError = testContext.releaseError = true;
+      const res = await POST(request());
+      expect((await res.json()).code).toBe("outcome_uncertain");
+      expect(testContext.deletedIds).toEqual(["ph-1"]);
     });
   });
 });

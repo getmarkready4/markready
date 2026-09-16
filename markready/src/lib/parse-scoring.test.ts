@@ -34,6 +34,8 @@ describe("parse-scoring.ts", () => {
       criteria: {
         task_response: { band: 6.5, strengths_noted: "Good", rationale: "Clear structure" },
         coherence_cohesion: { band: 6.0, strengths_noted: "OK", rationale: "Some linking" },
+        lexical_resource: { band: 7, strengths_noted: "OK", rationale: "Precise" },
+        grammatical_range_accuracy: { band: 7, strengths_noted: "OK", rationale: "Accurate" },
       },
       weakest_criterion: "coherence_cohesion",
       weaknesses: [
@@ -233,19 +235,34 @@ describe("parse-scoring.ts", () => {
       expect(result?.vocabulary_upgrades).toEqual([]);
     });
 
-    it("clamps criterion bands to [1, 9]", () => {
+    it("rejects out-of-range bands instead of manufacturing a valid score", () => {
       const payload = {
         ...validPayload,
         criteria: {
+          ...validPayload.criteria,
           task_response: { band: 15, strengths_noted: "Good", rationale: "OK" },
           coherence_cohesion: { band: -2, strengths_noted: "Bad", rationale: "OK" },
         },
       };
       const raw = JSON.stringify(payload);
       const result = parseScoringResult(raw);
-      expect(result).not.toBeNull();
-      expect(result?.criteria.task_response?.band).toBe(9);
-      expect(result?.criteria.coherence_cohesion?.band).toBe(1);
+      expect(result).toBeNull();
+    });
+
+    it("rejects a partial Band 9 result and unknown or duplicate task criteria", () => {
+      for (const criteria of [
+        { task_response: { band: 9 } },
+        { ...validPayload.criteria, invented: { band: 9 } },
+        { ...validPayload.criteria, task_achievement: { band: 9 } },
+        { ...validPayload.criteria, lexical_resource: { band: "9" } },
+      ]) expect(parseScoringResult(JSON.stringify({ ...validPayload, criteria }))).toBeNull();
+    });
+
+    it.each(["TASK1_ACADEMIC", "TASK1_GENERAL"] as const)("accepts all four criteria for %s only with its rubric", (task) => {
+      const { task_response, ...rest } = validPayload.criteria;
+      const raw = JSON.stringify({ ...validPayload, criteria: { ...rest, task_achievement: task_response } });
+      expect(parseScoringResult(raw, task)).not.toBeNull();
+      expect(parseScoringResult(raw, "TASK2")).toBeNull();
     });
   });
 });

@@ -70,7 +70,10 @@ const NEXT_ACTION: Record<CriterionKey, string> = {
   grammatical_range_accuracy: "Check every verb matches its subject.",
 };
 
-export function nextAction(weakest: CriterionKey): string {
+export function nextAction(weakest: CriterionKey, taskType: TaskType): string {
+  if (weakest === "task_achievement" && taskType === "TASK1_GENERAL") {
+    return "State your letter's purpose, cover every bullet point, and use the right tone.";
+  }
   return NEXT_ACTION[weakest] ?? "Read your essay aloud and fix what sounds wrong.";
 }
 

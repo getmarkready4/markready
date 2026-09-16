@@ -10,16 +10,29 @@ import type { ScoringResult, TaskType } from "@/types/scoring";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseScoringResult, extractJson } from "@/lib/parse-scoring";
-import { countUsedToday, isCohort, DAILY_FREE_LIMIT, type Cohort } from "@/lib/quota";
+import { getScoringUsage, remainingToday, isCohort, DAILY_FREE_LIMIT, type Cohort } from "@/lib/quota";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Releases the quota slot held by an in-flight submission. Never throws. */
-async function deletePlaceholder(service: SupabaseClient, id: string) {
-  const { error } = await service.from("submissions").delete().eq("id", id);
-  if (error) console.error("Placeholder delete failed:", error.message);
+export const maxDuration = 240;
+
+/** Conditional database release can never remove a completed score. */
+async function releaseReservation(service: SupabaseClient, userId: string, id: string) {
+  try {
+    const { error } = await service.rpc("release_scoring", { p_user_id: userId, p_id: id })
+      .abortSignal(AbortSignal.timeout(10_000));
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+function uncertainOutcome() {
+  return NextResponse.json({ code: "outcome_uncertain", error: "We could not confirm the result. Check My progress before trying again; an unfinished request expires within five minutes." }, { status: 503 });
 }
 
 const client = new OpenAI({
+  maxRetries: 0,
+  timeout: 90_000,
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
   defaultHeaders: {
@@ -152,6 +165,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { question, essay, taskType, model, image } = body as Record<string, unknown>;
 
   if (typeof question !== "string" || typeof essay !== "string") {
@@ -237,52 +253,24 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Step 4 — Insert placeholder row first
-  const { data: placeholder, error: placeholderError } = await serviceClient
-    .from("submissions")
-    .insert({
-      user_id: user.id,
-      task_type: resolvedTaskType,
-      question,
-      essay,
-      scores: null,
-      overall_band: null,
-    })
-    .select("id")
-    .single();
-
-  if (placeholderError || !placeholder) {
-    console.error("Placeholder insert failed:", placeholderError?.message);
-    return NextResponse.json({ error: "Failed to save submission" }, { status: 500 });
+  // Atomic service-only reservation. A missing migration fails closed.
+  let reservation;
+  try {
+    reservation = await serviceClient.rpc("reserve_scoring", {
+      p_user_id: user.id, p_task_type: resolvedTaskType, p_question: question, p_essay: essay,
+    }).abortSignal(AbortSignal.timeout(10_000));
+  } catch {
+    return uncertainOutcome();
   }
-
-  const placeholderId = placeholder.id;
-
-  // Step 5 — Daily free mark (one per UTC day; staff unlimited).
-  // The count includes the placeholder just inserted, hence `>` not `>=`.
-  let count: number | null = null;
-
-  if (cohort !== "staff") {
-    count = await countUsedToday(serviceClient, user.id);
-
-    if (count === null) {
-      await deletePlaceholder(serviceClient, placeholderId);
-      return NextResponse.json({ error: "Unable to verify your usage" }, { status: 500 });
-    }
-
-    if (count > DAILY_FREE_LIMIT) {
-      await deletePlaceholder(serviceClient, placeholderId);
-      return NextResponse.json(
-        {
-          error: "You've used today's free mark",
-          code: "quota_exhausted",
-          limit: DAILY_FREE_LIMIT,
-          reset: "midnight UTC",
-        },
-        { status: 403 }
-      );
-    }
+  if (reservation.error || !reservation.data) return uncertainOutcome();
+  const slot = reservation.data;
+  if (slot.code === "request_active" || slot.code === "quota_exhausted") {
+    return NextResponse.json({ ...slot, limit: DAILY_FREE_LIMIT,
+      error: slot.code === "request_active" ? "A scoring request is already in progress." : "You've used today's free mark",
+    }, { status: slot.code === "request_active" ? 409 : 403 });
   }
+  if (typeof slot.id !== "string") return uncertainOutcome();
+  const placeholderId = slot.id;
 
   const systemPrompt = SYSTEM_PROMPTS[resolvedTaskType];
   const userMessage = `TASK QUESTION:\n${question}\n\nCANDIDATE RESPONSE:\n${essay}\n\nScore this response now.`;
@@ -322,7 +310,7 @@ export async function POST(req: NextRequest) {
     unscorable = detectUnscorable(raw);
     if (unscorable) break;
 
-    result = parseScoringResult(raw);
+    result = parseScoringResult(raw, resolvedTaskType);
     if (!result) {
       console.error(`Attempt ${attempt + 1} parse/validation failed. Raw:`, raw);
       lastFailure = "parse";
@@ -331,13 +319,7 @@ export async function POST(req: NextRequest) {
 
   // Unscorable — delete placeholder, store no band, consume no quota
   if (unscorable) {
-    const { error: deleteError } = await serviceClient
-      .from("submissions")
-      .delete()
-      .eq("id", placeholderId);
-    if (deleteError) {
-      console.error("Placeholder delete failed:", deleteError.message);
-    }
+    if (!await releaseReservation(serviceClient, user.id, placeholderId)) return uncertainOutcome();
     return NextResponse.json(
       { error: "unscorable", reason: unscorable.reason, detectedTask: unscorable.detectedTask },
       { status: 422 }
@@ -345,14 +327,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result) {
-    // Delete placeholder on terminal failure
-    const { error: deleteError } = await serviceClient
-      .from("submissions")
-      .delete()
-      .eq("id", placeholderId);
-    if (deleteError) {
-      console.error("Placeholder delete failed:", deleteError.message);
-    }
+    if (!await releaseReservation(serviceClient, user.id, placeholderId)) return uncertainOutcome();
 
     if (lastFailure === "api") {
       return NextResponse.json(
@@ -375,24 +350,36 @@ export async function POST(req: NextRequest) {
     Math.max(1, Object.keys(result.criteria).length);
   result.overall_band = Math.max(1, Math.min(9, Math.round(meanBand * 2) / 2));
 
-  // Step 8 — Update placeholder with scores
-  const { error: updateError } = await serviceClient
-    .from("submissions")
-    .update({
-      scores: result,
-      overall_band: result.overall_band,
-    })
-    .eq("id", placeholderId);
-
-  if (updateError) {
-    console.error("Submission update failed:", updateError.message);
-    return NextResponse.json({ error: "Failed to save submission" }, { status: 500 });
+  // Only return database-confirmed scores. A lost completion response is not
+  // proof of failure: recover by UUID before attempting a conditional release.
+  let saved: { scores: ScoringResult } | null = null;
+  try {
+    const completion = await serviceClient.rpc("complete_scoring", {
+      p_user_id: user.id, p_id: placeholderId, p_scores: result, p_overall_band: result.overall_band,
+    }).abortSignal(AbortSignal.timeout(10_000));
+    if (!completion.error) saved = completion.data?.submission ?? null;
+  } catch { /* Reconcile uncertain completion below. */ }
+  if (!saved?.scores) {
+    try {
+      const recovery = await serviceClient.from("submissions").select("scores")
+        .eq("id", placeholderId).eq("user_id", user.id)
+        .abortSignal(AbortSignal.timeout(10_000)).maybeSingle();
+      if (!recovery.error && recovery.data?.scores) saved = recovery.data;
+    } catch { /* Conditional release remains safe even if this read failed. */ }
   }
-
-  // Free marks left today after this one. `count` already includes this
-  // submission; null means staff (unlimited).
-  const remaining =
-    cohort === "staff" ? null : Math.max(0, DAILY_FREE_LIMIT - (count ?? 0));
-
-  return NextResponse.json({ ...result, remaining });
+  if (!saved?.scores) {
+    const released = await releaseReservation(serviceClient, user.id, placeholderId);
+    if (!released) return uncertainOutcome();
+    // A completion may have committed while recovery was unavailable. Never
+    // promise that quota was restored or report an unsaved computed result.
+    return uncertainOutcome();
+  }
+  const usage = await getScoringUsage(serviceClient, user.id);
+  if (!usage) {
+    return NextResponse.json({ ...saved.scores, user_id: user.id, allowance_unavailable: true });
+  }
+  return NextResponse.json({ ...saved.scores, user_id: user.id,
+    ...usage,
+    remaining: remainingToday(cohort, usage.used_successful, usage.active),
+  });
 }

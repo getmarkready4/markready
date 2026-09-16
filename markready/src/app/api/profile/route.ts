@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { countUsedToday, remainingToday, isCohort, DAILY_FREE_LIMIT } from "@/lib/quota";
+import { getScoringUsage, remainingToday, isCohort, DAILY_FREE_LIMIT } from "@/lib/quota";
 
 /**
  * Where a user says they heard about us. Kept in sync with the options in
@@ -74,19 +74,21 @@ export async function GET() {
 
   // Unknown or missing cohort is a regular user: limited, never staff.
   const cohort = isCohort(profile?.cohort) ? profile.cohort : "user";
-  const used = await countUsedToday(service, user.id);
-  if (used === null) {
+  const usage = await getScoringUsage(service, user.id);
+  if (usage === null) {
     return NextResponse.json({ error: "Unable to load your usage" }, { status: 500 });
   }
 
   return NextResponse.json({
+    user_id: user.id,
     cohort,
     referral_source: profile?.referral_source ?? null,
-    used,
-    remaining: remainingToday(cohort, used),
+    ...usage,
+    used: usage.used_successful + Number(usage.active),
+    remaining: remainingToday(cohort, usage.used_successful, usage.active),
     limit: cohort === "staff" ? null : DAILY_FREE_LIMIT,
     reset: "midnight UTC",
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 /**

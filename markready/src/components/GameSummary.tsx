@@ -63,10 +63,10 @@ export function GameSummary({
         </span>
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-[#5B6266] font-semibold">
-            Do this next
+            General practice tip
           </p>
           <p className="text-base text-[#23282B] font-medium leading-snug">
-            {nextAction(weakestKey)}
+            {nextAction(weakestKey, taskType)}
           </p>
         </div>
       </div>
