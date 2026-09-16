@@ -1,7 +1,7 @@
 # Plan: scoring reliability and safe repeat practice
 
 Date: 2026-09-14
-Status: implementation verified, independently reviewed and human approved on 2026-09-16. Supabase resumed; production cutover in progress. See session.md for current state and tests.
+Status: implemented, independently reviewed, human approved and released to production on 2026-09-16. See session.md for deployment evidence, tests and follow-up.
 Baseline: local main at 05d1650. Recheck GitHub before implementation; preserve unrelated work.
 
 ## Scope and authority

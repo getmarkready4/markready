@@ -1,5 +1,13 @@
 # MarkReady memory
 
+## 2026-09-16, Five reliability fixes released
+
+**What was decided:** Released code commit 5605697ec21103814178f1dde10a8b5b112f5064 to main and verified Vercel deployment dpl_7QL616mero23E4xyecgZBQ248YbY READY on markready-alpha.vercel.app. Scoring maintenance is lifted on production aliases. Keep the firewall rule `Block scoring on retired deployments`: new preview hosts require an explicit update after checking they run leased scoring code.
+
+**Why:** Migration/history/privileges and preserved score counts passed; live Supabase scoring_usage returned 200 for service_role and 401 for anon. Public home/login returned 200; profile/scoring returned expected unauthenticated 401. Demo returns intentional production 404. No paid score or signed-in production journey was run.
+
+**What was rejected:** Removing protection from old scoring deployments, modifying the evaluation prompt, or fixing unrelated advisor warnings in this release. Follow up on existing handle_new_user execution grants and leaked-password protection; test a real signed-in score manually. This entry and the release session notes are a documentation-only follow-up to the code release.
+
 ## 2026-09-16, Production release approved after Supabase resume
 
 **What was decided:** The user's latest instruction approves the reviewed diff, migration, main commit and production push. Supabase now links and answers queries. GitHub main remains 05d1650; Vercel Fluid Compute is enabled on Hobby, supporting the 240-second route budget. Apply only 20260914125956 in a transaction and record that version, because existing remote migration history differs from the repository.

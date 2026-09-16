@@ -1,7 +1,7 @@
 # Implementation brief: reliability review fixes
 
 Date: 2026-09-16
-Status: implementation and independent full diff review complete; human approved commit and production push after resuming Supabase on 2026-09-16. Production cutover in progress. Earlier implementation instructions below are historical context.
+Status: all five fixes released to production on 2026-09-16 as code commit 5605697. Migration applied, deployment READY, production scoring reopened and smoke checks passed. Earlier implementation instructions below are historical context.
 
 ## Goal
 
@@ -23,6 +23,14 @@ Read plan.md in this directory completely, especially Reviewer resolutions. It i
 - Run focused/full tests, lint, TypeScript and build; surface every unavailable check. Independent reviewer approved the plan, not any implementation.
 
 ## Handoff
+
+### Release outcome (2026-09-16)
+
+Code commit: 5605697ec21103814178f1dde10a8b5b112f5064, pushed to main. Vercel deployment dpl_7QL616mero23E4xyecgZBQ248YbY was verified READY with all three production aliases on that commit. Live Supabase HTTP scoring_usage succeeded using the project's service_role key and denied anon (401); keys remained in memory and were not printed or written. Production home/login returned 200; unauthenticated profile and scoring returned 401. The demo-score production 404 is intentional and confirmed in its existing source guard, not a release defect.
+
+Scoring firewall was narrowed and published: `Block scoring on retired deployments` denies /api/score on hosts other than the three production aliases and verified code-release deployment URL. Historical previews/deployment URLs remain unable to score. Add any future preview host only after confirming it uses leased scoring; do not blindly remove the rule. The rest of the website was not paused. All four historical scores were retained.
+
+Remaining human check: sign in and submit one real essay, verify the result and daily allowance. No paid model call, email, new account, or signed-in production journey was performed. Existing advisor warnings are unchanged (handle_new_user public execution grants; leaked-password protection disabled). No prompt or unrelated research changes. Local transaction wrapper `.codex/release-leased-scoring-20260916.sql` is operational scratch, intentionally not committed. Documentation-only follow-up records this verified release outcome.
 
 ### Release checkpoint (2026-09-16)
 
