@@ -202,6 +202,10 @@ function LoginForm() {
           <Link href="/privacy" className="hover:text-[#23282B] underline">
             Privacy
           </Link>
+          <span className="mx-2">·</span>
+          <Link href="/refund" className="hover:text-[#23282B] underline">
+            Refund
+          </Link>
         </div>
         <p className="text-xs text-[#9BA3A8] leading-relaxed">
           Scores are AI-generated estimates, not official results. IELTS™ is a registered
