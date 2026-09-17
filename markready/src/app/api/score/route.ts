@@ -10,7 +10,7 @@ import type { ScoringResult, TaskType } from "@/types/scoring";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseScoringResult, extractJson } from "@/lib/parse-scoring";
-import { getScoringUsage, remainingToday, isCohort, DAILY_FREE_LIMIT, type Cohort } from "@/lib/quota";
+import { getScoringUsage, remainingMarks, isCohort, FREE_MARKS_TOTAL, type Cohort } from "@/lib/quota";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const maxDuration = 240;
@@ -105,7 +105,7 @@ type Unscorable = { reason: string; detectedTask?: string };
 // The model returns { "scorable": false, ... } when the candidate response is a
 // different task type than the selected rubric (e.g. a Task 2 essay submitted for
 // letter scoring). These are user mistakes, not scores — the route must NOT store
-// them or consume the daily quota, and must not retry (the verdict is deterministic).
+// them or consume a mark, and must not retry (the verdict is deterministic).
 function detectUnscorable(raw: string): Unscorable | null {
   let obj: unknown;
   try {
@@ -265,8 +265,8 @@ export async function POST(req: NextRequest) {
   if (reservation.error || !reservation.data) return uncertainOutcome();
   const slot = reservation.data;
   if (slot.code === "request_active" || slot.code === "quota_exhausted") {
-    return NextResponse.json({ ...slot, limit: DAILY_FREE_LIMIT,
-      error: slot.code === "request_active" ? "A scoring request is already in progress." : "You've used today's free mark",
+    return NextResponse.json({ ...slot, limit: FREE_MARKS_TOTAL,
+      error: slot.code === "request_active" ? "A scoring request is already in progress." : "You've used all your marks",
     }, { status: slot.code === "request_active" ? 409 : 403 });
   }
   if (typeof slot.id !== "string") return uncertainOutcome();
@@ -380,6 +380,6 @@ export async function POST(req: NextRequest) {
   }
   return NextResponse.json({ ...saved.scores, user_id: user.id,
     ...usage,
-    remaining: remainingToday(cohort, usage.used_successful, usage.active),
+    remaining: remainingMarks(cohort, usage),
   });
 }

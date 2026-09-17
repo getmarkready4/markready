@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { getScoringUsage, remainingToday, isCohort, DAILY_FREE_LIMIT } from "@/lib/quota";
+import { getScoringUsage, remainingMarks, isCohort, FREE_MARKS_TOTAL, PACK_MARKS, PACK_DAYS, PACK_PRICE_USD } from "@/lib/quota";
 
 /**
  * Where a user says they heard about us. Kept in sync with the options in
@@ -52,7 +52,7 @@ async function writeProfile(
   return insertError ? insertError.message : null;
 }
 
-/** Current cohort, onboarding state, and today's quota — used by /score and /welcome. */
+/** Current cohort, onboarding state, and marks allowance — used by /score and /welcome. */
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -84,10 +84,9 @@ export async function GET() {
     cohort,
     referral_source: profile?.referral_source ?? null,
     ...usage,
-    used: usage.used_successful + Number(usage.active),
-    remaining: remainingToday(cohort, usage.used_successful, usage.active),
-    limit: cohort === "staff" ? null : DAILY_FREE_LIMIT,
-    reset: "midnight UTC",
+    remaining: remainingMarks(cohort, usage),
+    limit: cohort === "staff" ? null : FREE_MARKS_TOTAL,
+    pack: { marks: PACK_MARKS, days: PACK_DAYS, price_usd: PACK_PRICE_USD },
   }, { headers: { "Cache-Control": "private, no-store" } });
 }
 

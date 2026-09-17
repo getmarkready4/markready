@@ -174,12 +174,15 @@ export default async function Home() {
       {/* Footer */}
       <footer className="border-t border-[#E4DFD3]">
         <div className="max-w-5xl mx-auto px-4 py-8 space-y-3">
-          <div className="flex items-center justify-center gap-4 text-sm text-[#5B6266]">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-[#5B6266]">
+            <Link href="/refund" className="hover:text-[#23282B] underline">
+              Refund Policy
+            </Link>
             <Link href="/terms" className="hover:text-[#23282B] underline">
-              Terms
+              Terms of Service
             </Link>
             <Link href="/privacy" className="hover:text-[#23282B] underline">
-              Privacy
+              Privacy Policy
             </Link>
             <Link href="/login" className="hover:text-[#23282B] underline">
               Sign in

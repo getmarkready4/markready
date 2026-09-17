@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 
 /**
- * Shown when a user has spent today's free mark.
+ * Shown when an account has used its free marks.
  *
- * There is no checkout yet — payment rails are a later step — so this records
- * interest only. It must not imply a working purchase.
+ * The plan is fixed: 20 successful marks for US$20, valid 30 days from
+ * purchase. Checkout is not wired yet — payment rails are the next step — so
+ * this presents the plan and records interest. It must not imply a working
+ * purchase; packs are currently granted manually after payment.
  */
 export default function UpgradePage() {
   const [state, setState] = useState<"idle" | "saving" | "done" | "error">("idle");
@@ -34,22 +36,32 @@ export default function UpgradePage() {
 
       <div className="w-full max-w-md bg-white border border-[#E4DFD3] rounded-2xl p-8 text-center">
         <h1 className="font-serif text-xl font-semibold text-[#23282B] mb-3">
-          Keep practising between daily marks
+          Get 20 more marks
         </h1>
 
-        <p className="text-sm text-[#5B6266] mb-2">
-          You get one free scored essay every day. Your next one unlocks at
-          midnight UTC. Your score page shows the reset in your local time.
+        <p className="text-sm text-[#5B6266] mb-4">
+          Every account starts with two free scored essays. When they&rsquo;re used,
+          a Mark Pack gives you 20 more.
         </p>
+
+        <div className="mb-4 rounded-xl border border-[#E4DFD3] bg-[#FAF8F3] px-5 py-4 text-left">
+          <p className="font-serif text-2xl font-semibold text-[#23282B]">
+            US$20 <span className="text-base font-normal text-[#5B6266]">· 20 marks</span>
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-[#5B6266]">
+            <li>Valid for 30 days from purchase</li>
+            <li>Only successful scores count — a failed attempt never uses a mark</li>
+            <li>The same full feedback as your free marks</li>
+          </ul>
+        </div>
+
         <p className="text-sm text-[#5B6266] mb-6">
-          Want more than one a day? We&rsquo;re building an unlimited plan next
-          &mdash; tell us you want it and you&rsquo;ll be first to know, at an
-          early-supporter price.
+          Checkout is being set up. Tap below and we&rsquo;ll email you the moment it opens.
         </p>
 
         {state === "done" ? (
           <div className="p-4 bg-[#FAF8F3] border border-[#E4DFD3] rounded-lg text-sm text-[#23282B]">
-            Noted &mdash; thank you. We&rsquo;ll be in touch before anyone else.
+            Noted &mdash; thank you. We&rsquo;ll be in touch as soon as you can buy a pack.
           </div>
         ) : (
           <>
@@ -58,7 +70,7 @@ export default function UpgradePage() {
               disabled={state === "saving"}
               className="w-full py-2.5 rounded-lg bg-[#23282B] text-white text-sm font-medium disabled:opacity-40 hover:bg-[#3A4145] transition-colors"
             >
-              {state === "saving" ? "Saving…" : "I want unlimited scoring"}
+              {state === "saving" ? "Saving…" : "Notify me when checkout opens"}
             </button>
             {state === "error" && (
               <p className="mt-3 text-sm text-red-700">
@@ -74,7 +86,7 @@ export default function UpgradePage() {
             dashboard
           </Link>
           .
-          {" "}<Link href="/score" className="text-[#23282B] underline">Return to your drafts</Link> to keep writing before the next mark.
+          {" "}<Link href="/score" className="text-[#23282B] underline">Return to your drafts</Link> to keep writing.
         </p>
       </div>
     </div>

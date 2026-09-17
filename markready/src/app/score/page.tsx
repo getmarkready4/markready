@@ -321,10 +321,18 @@ type Allowance = {
   cohort: string;
   remaining: number | null;
   used_successful: number;
+  free_remaining: number;
+  pack_remaining: number;
   active: boolean;
   lease_expires_at: string | null;
-  reset_at: string;
+  next_expiry_at: string | null;
 };
+
+const isCount = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
+const isIsoOrNull = (v: unknown) => v === null || (typeof v === "string" && Number.isFinite(Date.parse(v)));
+// setTimeout overflows past ~24.8 days and fires immediately; a pack expiry is
+// up to 30 days out, so long waits are re-checked periodically instead.
+const MAX_REFRESH_DELAY_MS = 6 * 60 * 60 * 1000;
 
 function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; userEmail: string | null; isCurrent: () => boolean }) {
   const router = useRouter();
@@ -369,12 +377,11 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
       if (!current() || request !== profileRequest.current) return;
       if (!response.ok || !data || typeof data.cohort !== "string" ||
           (data.user_id !== undefined && data.user_id !== userId) ||
-          !(data.cohort === "staff" ? data.remaining === null : Number.isInteger(data.remaining) && data.remaining >= 0) ||
-          !Number.isInteger(data.used_successful) || data.used_successful < 0 ||
+          !(data.cohort === "staff" ? data.remaining === null : isCount(data.remaining)) ||
+          !isCount(data.used_successful) || !isCount(data.free_remaining) || !isCount(data.pack_remaining) ||
           typeof data.active !== "boolean" ||
-          !(data.lease_expires_at === null || (typeof data.lease_expires_at === "string" && Number.isFinite(Date.parse(data.lease_expires_at)))) ||
-          (data.active && data.lease_expires_at === null) ||
-          typeof data.reset_at !== "string" || !Number.isFinite(Date.parse(data.reset_at))) throw new Error("Invalid allowance");
+          !isIsoOrNull(data.lease_expires_at) || !isIsoOrNull(data.next_expiry_at) ||
+          (data.active && data.lease_expires_at === null)) throw new Error("Invalid allowance");
       setAllowance(data);
       setAllowanceState("ready");
     } catch {
@@ -403,8 +410,14 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
 
   useEffect(() => {
     if (!allowance || allowanceState !== "ready") return;
-    const deadline = Math.min(Date.parse(allowance.reset_at), allowance.active && allowance.lease_expires_at ? Date.parse(allowance.lease_expires_at) : Infinity);
-    const timer = setTimeout(() => { setAllowanceState("loading"); void refreshAllowance(); }, Math.max(1000, deadline - Date.now() + 100));
+    // Refresh when the in-flight lease ends or the nearest pack expires.
+    const deadline = Math.min(
+      allowance.active && allowance.lease_expires_at ? Date.parse(allowance.lease_expires_at) : Infinity,
+      allowance.next_expiry_at ? Date.parse(allowance.next_expiry_at) : Infinity
+    );
+    if (!Number.isFinite(deadline)) return;
+    const delay = Math.min(MAX_REFRESH_DELAY_MS, Math.max(1000, deadline - Date.now() + 100));
+    const timer = setTimeout(() => { setAllowanceState("loading"); void refreshAllowance(); }, delay);
     return () => clearTimeout(timer);
   }, [allowance, allowanceState, refreshAllowance]);
 
@@ -534,7 +547,7 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
       }
       if (res.status === 403) {
         if (data.code === "quota_exhausted") {
-          setError("Today’s free mark has been used. You can keep editing this draft and review your progress.");
+          setError("You’ve used all your marks. Your draft is kept here — see the upgrade page for 20 more marks, or review your progress.");
           return;
         }
         if (data.code === "onboarding_incomplete") {
@@ -594,11 +607,20 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
       <main className="max-w-3xl mx-auto px-4 py-10 space-y-8">
         {storageWarning && <p role="alert" className="text-sm text-amber-800">{storageWarning}</p>}
         <div role="status" className="text-sm text-[#5B6266] space-y-2">
-          {allowanceState === "loading" ? <p>Checking today’s scoring allowance…</p> : allowanceState === "error" ? (
+          {allowanceState === "loading" ? <p>Checking your scoring allowance…</p> : allowanceState === "error" ? (
             <p>Could not check your scoring allowance. Your draft is still editable. <button onClick={() => { setAllowanceState("loading"); void refreshAllowance(); }} className="underline">Retry allowance check</button></p>
           ) : allowance && (
-            <p>{allowance.cohort === "staff" ? "Staff: unlimited scoring." : allowance.active ? "A response is already being scored. You can keep drafting while it finishes." : allowance.remaining === 0 ? "Today’s free mark is used. Keep drafting or review your progress." : `${allowance.remaining} free mark left today.`}
-              {allowance.cohort !== "staff" && <> Next daily reset: <time dateTime={allowance.reset_at}>{new Date(allowance.reset_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time> (your local time).</>}
+            <p>
+              {allowance.cohort === "staff" ? "Staff: unlimited scoring." : allowance.active ? "A response is already being scored. You can keep drafting while it finishes." : allowance.remaining === 0 ? (
+                <>You&rsquo;ve used all your marks. <Link href="/upgrade" className="underline">Get 20 more for US$20</Link> (valid 30 days), or keep drafting and review your progress.</>
+              ) : (
+                <>
+                  {allowance.remaining} mark{allowance.remaining === 1 ? "" : "s"} left{allowance.free_remaining > 0 ? ` (${allowance.free_remaining} free)` : ""}.
+                  {allowance.pack_remaining > 0 && allowance.next_expiry_at && (
+                    <> Paid marks expire <time dateTime={allowance.next_expiry_at}>{new Date(allowance.next_expiry_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time> (your local time).</>
+                  )}
+                </>
+              )}
             </p>
           )}
           <p>Drafts are kept in this browser tab for your account. Switching tasks keeps each draft.</p>

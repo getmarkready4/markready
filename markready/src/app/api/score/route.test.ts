@@ -21,8 +21,10 @@ vi.mock("@/lib/supabase/server", () => ({
 let testContext = {
   isBanned: false,
   profileError: false,
-  // Completed marks today; active leases are a separate database state.
+  // Completed marks, lifetime; active leases are a separate database state.
   usedCount: 0,
+  // Marks left in an unexpired pack once the two free marks are spent.
+  packRemaining: 0,
   active: false,
   reservationError: false,
   usageError: false,
@@ -91,18 +93,29 @@ vi.mock("@/lib/supabase/service", () => ({
     return {
       rpc: vi.fn((name: string, args: Record<string, unknown>) => ({
         abortSignal: async () => {
-          const usage = { used_successful: testContext.usedCount, active: testContext.active, lease_expires_at: testContext.active ? "2026-09-14T23:59:00Z" : null, reset_at: "2026-09-15T00:00:00Z" };
+          // Mirrors scoring_usage: two free marks for life, then pack marks.
+          const freeRemaining = Math.max(0, 2 - testContext.usedCount - Number(testContext.active));
+          const usage = {
+            used_successful: testContext.usedCount, free_used: Math.min(testContext.usedCount, 2),
+            free_remaining: freeRemaining, pack_remaining: testContext.packRemaining,
+            remaining: freeRemaining + testContext.packRemaining,
+            active: testContext.active, lease_expires_at: testContext.active ? "2026-09-17T23:59:00Z" : null,
+            next_expiry_at: testContext.packRemaining > 0 ? "2026-10-17T00:00:00Z" : null,
+            // Transitional field the database still emits; the app must not echo it.
+            reset_at: "2026-09-18T00:00:00Z",
+          };
           if (name === "reserve_scoring") {
             if (testContext.reservationError) return { data: null, error: { message: "function missing" } };
             return { error: null, data: testContext.cohort !== "staff" && testContext.active
               ? { ...usage, code: "request_active" }
-              : testContext.cohort !== "staff" && testContext.usedCount >= 1
+              : testContext.cohort !== "staff" && usage.remaining <= 0
                 ? { ...usage, code: "quota_exhausted" } : { ...usage, id: "ph-1" } };
           }
           if (name === "complete_scoring") {
             if (testContext.completionError) throw new Error("lost completion response");
             if (testContext.completionRejected) return { data: { code: "reservation_expired" }, error: null };
             testContext.updatePayloads.push({ scores: args.p_scores, overall_band: args.p_overall_band });
+            if (testContext.cohort !== "staff" && testContext.usedCount >= 2) testContext.packRemaining--;
             testContext.usedCount++;
             return { data: { submission: { scores: args.p_scores } }, error: null };
           }
@@ -181,7 +194,7 @@ function validScoringJson(): ScoringResult {
 describe("POST /api/score", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    testContext = { isBanned: false, profileError: false, usedCount: 0, active: false,
+    testContext = { isBanned: false, profileError: false, usedCount: 0, packRemaining: 0, active: false,
       reservationError: false, usageError: false, completionError: false, recoveryError: false, releaseError: false,
       completionRejected: false, recoveredScores: null,
       cohort: "user", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false };
@@ -284,13 +297,29 @@ describe("POST /api/score", () => {
       expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it("allows the first mark of the UTC day", async () => {
+    it("allows both lifetime free marks", async () => {
+      // WHY: the allowance is two successful marks per account, not one per day
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      testContext.usedCount = 0;
       mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
-      const req = createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" });
-      const res = await POST(req);
+      const req = () => createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" });
+      testContext.usedCount = 0;
+      expect((await POST(req())).status).toBe(200);
+      testContext.usedCount = 1;
+      const second = await POST(req());
+      expect(second.status).toBe(200);
+      expect((await second.json() as Record<string, unknown>).remaining).toBe(0);
+    });
+
+    it("draws on an unexpired pack once the free marks are spent", async () => {
+      // WHY: a paid pack must unlock scoring, and only its own marks may be consumed
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+      testContext.usedCount = 2;
+      testContext.packRemaining = 20;
+      mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
+      const res = await POST(createRequest({ question: "Q?", essay: "Essay word count test", taskType: "TASK2" }));
       expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ remaining: 19, free_remaining: 0, pack_remaining: 19 });
+      expect(mockCreate).toHaveBeenCalledTimes(1);
     });
 
     it("lets staff score past the free limit", async () => {
@@ -425,8 +454,10 @@ describe("POST /api/score", () => {
       const data = await res.json() as Record<string, unknown>;
       expect(data.overall_band).toBe(6.5);
       expect(data.word_count).toBe(5);
-      expect(data.remaining).toBe(0);
-      expect(data).toMatchObject({ used_successful: 1, active: false, lease_expires_at: null, reset_at: "2026-09-15T00:00:00Z" });
+      expect(data.remaining).toBe(1);
+      expect(data).toMatchObject({ used_successful: 1, free_remaining: 1, pack_remaining: 0, active: false, lease_expires_at: null, next_expiry_at: null });
+      // The database still emits a transitional reset_at; the contract does not.
+      expect(data).not.toHaveProperty("reset_at");
       expect(testContext.updatePayloads[0]).toHaveProperty("overall_band", 6.5);
       expect(testContext.deletedIds).toEqual([]);
     });
