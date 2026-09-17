@@ -4,7 +4,7 @@ export const metadata = {
   title: "Refund Policy — MarkReady",
 };
 
-/** Placeholder: the refund policy has not been written yet. */
+/** Refund policy as supplied by the founder. */
 export default function RefundPage() {
   return (
     <div className="min-h-screen bg-[#FAF8F3]">
@@ -24,7 +24,7 @@ export default function RefundPage() {
           Refund Policy
         </h1>
         <p className="text-[#5B6266] text-[15px] leading-relaxed">
-          Our refund policy will be published here.
+          Strictly no refunds or exchanges or transfer of credits.
         </p>
 
         <footer className="mt-12 pt-6 border-t border-[#E4DFD3] text-sm text-[#5B6266] flex flex-wrap gap-4">
