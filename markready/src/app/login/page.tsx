@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Turnstile } from "@/components/Turnstile";
 
 type Mode = "magic" | "password";
 
@@ -27,8 +28,10 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
+  const turnstileResetRef = useRef<(() => void) | null>(null);
 
   const urlError = searchParams.get("error");
   const errorMessage =
@@ -49,6 +52,10 @@ function LoginForm() {
     if (oauthError) {
       setError(oauthError.message);
       setGoogleLoading(false);
+      // Reset widget after failed attempt
+      if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
+        turnstileResetRef.current();
+      }
     }
     // On success the browser navigates away — no need to reset loading
   };
@@ -64,20 +71,39 @@ function LoginForm() {
     if (mode === "magic") {
       const { error: signInError } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          ...(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && captchaToken && { captchaToken }),
+        },
       });
       setLoading(false);
       if (signInError) {
         setError(signInError.message);
+        // Reset widget after failed attempt
+        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
+          turnstileResetRef.current();
+        }
       } else {
         setMessage("Check your email for a login link.");
         setEmail("");
+        // Reset widget after successful magic link send (token is spent)
+        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
+          turnstileResetRef.current();
+        }
       }
     } else {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+        options: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && captchaToken ? { captchaToken } : undefined,
+      });
       setLoading(false);
       if (signInError) {
         setError(signInError.message);
+        // Reset widget after failed attempt
+        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
+          turnstileResetRef.current();
+        }
       } else {
         router.push("/score");
       }
@@ -124,7 +150,7 @@ function LoginForm() {
 
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-px bg-[#E4DFD3]" />
-          <span className="text-xs text-[#9BA3A8]">or</span>
+          <span className="text-xs text-[#667075]">or</span>
           <div className="flex-1 h-px bg-[#E4DFD3]" />
         </div>
 
@@ -139,8 +165,8 @@ function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              disabled={loading || googleLoading}
-              className="w-full px-3 py-2 border border-[#E4DFD3] rounded-lg text-[#23282B] placeholder-[#9BA3A8] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 focus:border-[#1F5C4E] disabled:opacity-50 text-sm"
+              disabled={loading || googleLoading || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}
+              className="w-full px-3 py-2 border border-[#E4DFD3] rounded-lg text-[#23282B] placeholder-[#667075] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 focus:border-[#1F5C4E] disabled:opacity-50 text-sm"
               placeholder="you@example.com"
             />
           </div>
@@ -156,16 +182,26 @@ function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                disabled={loading || googleLoading}
-                className="w-full px-3 py-2 border border-[#E4DFD3] rounded-lg text-[#23282B] placeholder-[#9BA3A8] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 focus:border-[#1F5C4E] disabled:opacity-50 text-sm"
+                disabled={loading || googleLoading || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}
+                className="w-full px-3 py-2 border border-[#E4DFD3] rounded-lg text-[#23282B] placeholder-[#667075] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 focus:border-[#1F5C4E] disabled:opacity-50 text-sm"
                 placeholder="••••••••"
               />
             </div>
           )}
 
+          {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+            <Turnstile
+              onToken={(token) => {
+                setCaptchaToken(token);
+                const w = window as unknown as { __turnstileReset?: () => void };
+                turnstileResetRef.current = w.__turnstileReset ?? null;
+              }}
+            />
+          )}
+
           <button
             type="submit"
-            disabled={loading || googleLoading}
+            disabled={loading || googleLoading || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}
             className="w-full bg-[#1F5C4E] text-white py-2.5 rounded-lg hover:bg-[#154136] disabled:opacity-50 font-medium text-sm transition-colors"
           >
             {loading
@@ -207,7 +243,7 @@ function LoginForm() {
             Refund
           </Link>
         </div>
-        <p className="text-xs text-[#9BA3A8] leading-relaxed">
+        <p className="text-xs text-[#667075] leading-relaxed">
           Scores are AI-generated estimates, not official results. IELTS™ is a registered
           trademark of the British Council, IDP: IELTS Australia and Cambridge University
           Press &amp; Assessment. MarkReady is not affiliated with or endorsed by them.
