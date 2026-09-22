@@ -3,6 +3,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getScoringUsage, remainingMarks, isCohort, FREE_MARKS_TOTAL, PACK_MARKS, PACK_DAYS, PACK_PRICE_USD } from "@/lib/quota";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 /**
  * Where a user says they heard about us. Kept in sync with the options in
@@ -60,6 +61,15 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Rate limit: 30 GET requests per minute per user
+  const limit = checkRateLimit(user.id, 30, 60000);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429,
+      headers: { "Retry-After": String(limit.retryAfterSeconds) },
+    });
+  }
+
   const service = createServiceClient();
   const { data: profile, error } = await service
     .from("profiles")
@@ -100,6 +110,15 @@ export async function POST(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Rate limit: 10 POST requests per minute per user
+  const limit = checkRateLimit(user.id, 10, 60000);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429,
+      headers: { "Retry-After": String(limit.retryAfterSeconds) },
+    });
+  }
 
   let body: unknown;
   try {

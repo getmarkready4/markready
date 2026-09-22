@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseScoringResult, extractJson } from "@/lib/parse-scoring";
 import { getScoringUsage, remainingMarks, isCohort, FREE_MARKS_TOTAL, type Cohort } from "@/lib/quota";
+import { readJsonCapped } from "@/lib/read-json-capped";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const maxDuration = 240;
@@ -158,13 +159,21 @@ export async function POST(req: NextRequest) {
   }
 
   // Step 3 — Parse and validate body
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
+  // Cap request body at 3 MB. Vercel's platform limit is 4.5 MB, but the app's
+  // 2 MB image cap plus 30 KB essay plus 5 KB question + JSON overhead fits in 3 MB.
+  const MAX_BODY_BYTES = 3 * 1024 * 1024; // 3 MB
+  const bodyResult = await readJsonCapped(req, MAX_BODY_BYTES);
+  if (!bodyResult.ok) {
+    if (bodyResult.reason === "too_large") {
+      return NextResponse.json(
+        { error: "Request body exceeds maximum size" },
+        { status: 413 }
+      );
+    }
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  const body = bodyResult.data;
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }

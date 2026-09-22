@@ -169,7 +169,20 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 function createRequest(body: unknown): NextRequest {
-  return { json: async () => body } as unknown as NextRequest;
+  const text = JSON.stringify(body);
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(text);
+
+  const request = new Request("http://localhost/api/score", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "content-length": String(bytes.byteLength),
+    },
+    body: bytes,
+  });
+
+  return request as unknown as NextRequest;
 }
 
 function validScoringJson(): ScoringResult {
@@ -211,7 +224,14 @@ describe("POST /api/score", () => {
     it("returns 400 when JSON body is malformed", async () => {
       // WHY: previously an unhandled 500
       mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
-      const req = { json: async () => { throw new Error("invalid"); } } as unknown as NextRequest;
+      const malformedJson = "{ invalid json }";
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(malformedJson);
+      const req = new Request("http://localhost/api/score", {
+        method: "POST",
+        headers: { "content-length": String(bytes.byteLength) },
+        body: bytes,
+      }) as unknown as NextRequest;
       const res = await POST(req);
       expect(res.status).toBe(400);
     });
@@ -519,6 +539,25 @@ describe("POST /api/score", () => {
       const res = await POST(request());
       expect((await res.json()).code).toBe("outcome_uncertain");
       expect(testContext.deletedIds).toEqual(["ph-1"]);
+    });
+  });
+
+  describe("Body size cap", () => {
+    beforeEach(() => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+      testContext.cohort = "user";
+      testContext.referralSource = "reddit";
+    });
+
+    it("rejects oversized body (>3MB) with 413 and never reserves a mark", async () => {
+      // WHY: an oversized body must return 413 and never consume quota, so the user
+      // is not charged for a request that violated the size cap.
+      const largeEssay = "x".repeat(3 * 1024 * 1024); // 3MB of x's
+      const req = createRequest({ question: "Q?", essay: largeEssay, taskType: "TASK2" });
+      const res = await POST(req);
+      expect(res.status).toBe(413);
+      expect(testContext.deletedIds).toEqual([]); // No reservation was made
+      expect(mockCreate).not.toHaveBeenCalled(); // Model was never called
     });
   });
 });

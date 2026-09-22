@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // Valid IELTS bands a user may target: 4.0–9.0 in 0.5 steps.
 const ALLOWED_TARGETS = new Set([4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9]);
@@ -11,6 +12,15 @@ export async function POST(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Rate limit: 10 POST requests per minute per user
+  const limit = checkRateLimit(user.id, 10, 60000);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429,
+      headers: { "Retry-After": String(limit.retryAfterSeconds) },
+    });
+  }
 
   let body: unknown;
   try {
