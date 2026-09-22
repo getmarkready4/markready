@@ -271,7 +271,7 @@ export function ScoreReport({
                 className="rounded-2xl border border-[#E4DFD3] bg-white px-5 py-4 shadow-sm space-y-2.5"
               >
                 <div className="flex items-center gap-2">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F7E9DF] text-[#C97B4A] text-xs font-bold flex items-center justify-center">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F7E9DF] text-[#8F4E26] text-xs font-bold flex items-center justify-center">
                     {i + 1}
                   </span>
                   {badge && (
@@ -287,7 +287,7 @@ export function ScoreReport({
                     {fragments.map((f, j) => (
                       <span
                         key={j}
-                        className="px-2.5 py-1 rounded-lg bg-[#FDF6F1] text-[#C97B4A] text-xs font-medium line-through decoration-[#E0B79B]"
+                        className="px-2.5 py-1 rounded-lg bg-[#FDF6F1] text-[#8F4E26] text-xs font-medium line-through decoration-[#E0B79B]"
                       >
                         {f}
                       </span>
@@ -324,7 +324,7 @@ export function ScoreReport({
                   <span className="px-3 py-1 rounded-full bg-[#F2EEE5] text-[#5B6266] text-xs font-medium line-through decoration-[#C9C2B2]">
                     {v.original}
                   </span>
-                  <span className="text-[#C97B4A] text-sm">→</span>
+                  <span className="text-[#8F4E26] text-sm">→</span>
                   <span className="px-3 py-1 rounded-full bg-[#E7EFEC] text-[#1F5C4E] text-xs font-semibold">
                     {v.upgrade}
                   </span>

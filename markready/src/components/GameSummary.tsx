@@ -52,7 +52,7 @@ export function GameSummary({
       />
       <Row
         icon="!"
-        iconClass="bg-[#F7E9DF] text-[#C97B4A]"
+        iconClass="bg-[#F7E9DF] text-[#8F4E26]"
         label="Weakest"
         value={PLAIN_CRITERION_LABELS[weakestKey]}
         band={weakestBand}
@@ -71,7 +71,7 @@ export function GameSummary({
         </div>
       </div>
       {words.under && (
-        <p className="px-5 py-3 text-sm text-[#C97B4A] bg-[#FDF6F1]">
+        <p className="px-5 py-3 text-sm text-[#8F4E26] bg-[#FDF6F1]">
           {words.message}
         </p>
       )}
