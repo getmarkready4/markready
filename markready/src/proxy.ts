@@ -6,10 +6,24 @@ export async function proxy(request: NextRequest) {
     if (request.nextUrl.pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
     }
-    if (request.nextUrl.pathname.startsWith("/login")) {
+    const path = request.nextUrl.pathname;
+    if (path.startsWith("/login") || path === "/") {
       return NextResponse.next({ request });
     }
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  // Cookie short-circuit: "/" with no auth cookie bypasses Supabase call entirely.
+  // This allows the landing page to be cached by CDN.
+  const path = request.nextUrl.pathname;
+  if (path === "/") {
+    const hasAuthCookie = request.cookies.getAll().some(
+      ({ name }) => name.startsWith("sb-") && name.includes("auth-token")
+    );
+    if (!hasAuthCookie) {
+      // Anonymous visitor, no Supabase call needed. Return static HTML.
+      return NextResponse.next({ request });
+    }
   }
 
   let supabaseResponse = NextResponse.next({ request });
@@ -45,8 +59,8 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
   const isApi = path.startsWith("/api/");
+  const isHome = path === "/";
   const isLogin = path.startsWith("/login");
   const isWelcome = path.startsWith("/welcome");
   const isUpgrade = path.startsWith("/upgrade");
@@ -84,6 +98,9 @@ export async function proxy(request: NextRequest) {
   if (isLogin) {
     return refreshed(NextResponse.redirect(new URL(home, request.url)));
   }
+  if (isHome) {
+    return refreshed(NextResponse.redirect(new URL(home, request.url)));
+  }
   if (needsOnboarding && !isWelcome) {
     return refreshed(NextResponse.redirect(new URL("/welcome", request.url)));
   }
@@ -96,6 +113,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/login",
     "/login/:path*",
     "/score",

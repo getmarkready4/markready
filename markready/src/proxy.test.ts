@@ -41,3 +41,42 @@ it.each([
   if (status !== 200) expect(response.headers.has("x-middleware-next")).toBe(false);
   if (destination) expect(response.headers.get("location")).toBe(`https://example.test${destination}`);
 });
+
+it("landing page with no auth cookie bypasses Supabase, enabling CDN caching", async () => {
+  // WHY: Anonymous visitors to "/" must not call Supabase, so the response
+  // can be cached on Vercel CDN. Cache-Control headers prove no Supabase
+  // interaction (Supabase would set them to private, no-store).
+  state.signedIn = false;
+  const req = new NextRequest("https://example.test/");
+  const response = await proxy(req);
+  // No redirect (200 ok), no cache-disabling headers from Supabase
+  expect(response.status).toBe(200);
+  expect(response.headers.has("cache-control")).toBe(false);
+});
+
+it("landing page with auth cookie and valid session redirects to /score", async () => {
+  // WHY: Signed-in users arriving at "/" should land on the app, not the
+  // marketing page. We accept one Supabase call for this (stale or forged
+  // cookies cost a getUser() call, then we fall through to the landing page).
+  state.signedIn = true;
+  state.referral = "reddit";
+  const req = new NextRequest("https://example.test/", {
+    headers: {
+      // Realistic Supabase auth cookie name, matching the predicate in proxy.ts
+      cookie: "sb-testref-auth-token=valid-session-token; Path=/; HttpOnly",
+    },
+  });
+  const response = await proxy(req);
+  expect(response.status).toBe(307);
+  expect(response.headers.get("location")).toBe("https://example.test/score");
+});
+
+it("landing page served under MAINTENANCE_MODE", async () => {
+  // WHY: The landing page is marketing material and should remain reachable
+  // while the app is locked. A visitor should see the product, not a login wall.
+  vi.stubEnv("MAINTENANCE_MODE", "1");
+  state.signedIn = false;
+  const response = await proxy(new NextRequest("https://example.test/"));
+  expect(response.status).toBe(200);
+  vi.stubEnv("MAINTENANCE_MODE", "0");
+});
