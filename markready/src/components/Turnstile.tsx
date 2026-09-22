@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
+
+interface TurnstileHandle {
+  reset: () => void;
+}
 
 interface TurnstileProps {
   onToken: (token: string | null) => void;
+  /**
+   * Called when the CAPTCHA cannot produce a token and never will — script
+   * blocked, offline, widget stalled. The parent MUST use this to stop gating
+   * submit, because `onToken(null)` cannot do that job: it leaves the parent's
+   * token null, which is indistinguishable from "still waiting". Three earlier
+   * attempts at the timeout fix failed for exactly that reason.
+   */
+  onUnavailable: () => void;
 }
 
 declare global {
@@ -26,115 +38,140 @@ declare global {
       isReady: () => boolean;
       getResponse: (widgetId?: string) => string;
     };
-    __turnstileReset?: () => void;
   }
 }
 
 /**
- * Turnstile CAPTCHA widget wrapper. Loads the Cloudflare script once, renders
- * the widget, and calls back with the token. If the script fails to load within
- * 10s (e.g., ad blocker, offline), allows button to submit anyway so Supabase
- * can return a clear error instead of a silent lockout.
+ * Turnstile CAPTCHA widget wrapper. Loads the Cloudflare script, renders the
+ * widget, and calls back with the token. Handles token expiry, widget reset
+ * after login attempts, and a 10s fallback if the script fails to load or
+ * stalls (ad blocker, network issue, silent challenge failure). The fallback
+ * re-enables the submit button so Supabase can return a clear error instead of
+ * a permanent lockout. Reset function is exposed via ref so parent can call it
+ * on mount (stable) rather than through a window global (fragile).
  */
-export function Turnstile({ onToken }: TurnstileProps) {
-  const containerIdRef = useRef<string>("");
-  const widgetId = useRef<string | null>(null);
-  const scriptLoaded = useRef(false);
-  const [hasTimedOut, setHasTimedOut] = useState(false);
-  const [containerId, setContainerId] = useState<string>("");
+const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
+  ({ onToken, onUnavailable }, ref) => {
+    const containerIdRef = useRef(`turnstile-${Math.random().toString(36).slice(2)}`);
+    const widgetIdRef = useRef<string | null>(null);
+    const scriptLoadedRef = useRef(false);
+    const onTokenRef = useRef(onToken);
+    const onUnavailableRef = useRef(onUnavailable);
+    const tokenTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const [scriptReady, setScriptReady] = useState(false);
+    const [hasTimedOut, setHasTimedOut] = useState(false);
 
-  useEffect(() => {
-    // Initialize container ID on first render
-    if (!containerIdRef.current) {
-      containerIdRef.current = `turnstile-${Math.random().toString(36).slice(2)}`;
-      setContainerId(containerIdRef.current);
-    }
-  }, []);
+    // Keep callback refs in sync without affecting effect dependencies
+    useEffect(() => {
+      onTokenRef.current = onToken;
+      onUnavailableRef.current = onUnavailable;
+    }, [onToken, onUnavailable]);
 
-  useEffect(() => {
-    if (!containerId) return;
+    // Arm the 10s timeout on mount, unconditionally. This is the only placement
+    // that covers all failure modes: script never loads, script loads but widget
+    // never renders, widget renders but challenge never completes, challenge
+    // silently stalls. All reduce to the same observable: no token in 10s.
+    useEffect(() => {
+      const id = setTimeout(() => {
+        onUnavailableRef.current();
+        setHasTimedOut(true);
+      }, 10000);
+      tokenTimeoutRef.current = id;
+      return () => clearTimeout(id);
+    }, []);
 
-    // Load the Turnstile script once
-    if (!scriptLoaded.current && !window.turnstile) {
-      scriptLoaded.current = true;
+    // Load the Turnstile script once globally
+    useEffect(() => {
+      if (scriptLoadedRef.current || window.turnstile) {
+        // Script already loaded
+        setScriptReady(true);
+        return;
+      }
+
+      scriptLoadedRef.current = true;
       const script = document.createElement("script");
       script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
       script.async = true;
       script.defer = true;
 
-      const timeoutId = setTimeout(() => {
-        // Script failed to load within 10s; allow submission without token.
-        // Supabase will reject with a clear error if CAPTCHA is enforced.
-        onToken(null);
-        setHasTimedOut(true);
-      }, 10000);
-
       script.onload = () => {
-        clearTimeout(timeoutId);
-        // Script loaded; render the widget on next effect
+        // Script loaded; mark as ready so render effect can proceed
+        setScriptReady(true);
       };
 
       script.onerror = () => {
-        clearTimeout(timeoutId);
-        onToken(null);
+        // Script failed to load; fail fast instead of waiting 10s
+        if (tokenTimeoutRef.current) {
+          clearTimeout(tokenTimeoutRef.current);
+          tokenTimeoutRef.current = null;
+        }
+        onUnavailableRef.current();
         setHasTimedOut(true);
       };
 
       document.head.appendChild(script);
-    }
+    }, []);
 
-    // Render the widget if the script is already loaded
-    if (window.turnstile && !widgetId.current) {
+    // Render the widget once script is ready
+    useEffect(() => {
+      if (!scriptReady || !window.turnstile || widgetIdRef.current) {
+        // Either script not ready, global not available, or widget already mounted
+        return;
+      }
+
       const id = window.turnstile.render(`#${containerIdRef.current}`, {
         sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!,
         theme: "light",
         callback: (token: string) => {
-          onToken(token);
+          // Token received; clear the timeout (only place that disarms it)
+          if (tokenTimeoutRef.current) {
+            clearTimeout(tokenTimeoutRef.current);
+            tokenTimeoutRef.current = null;
+          }
+          onTokenRef.current(token);
         },
         "error-callback": () => {
-          onToken(null);
+          onTokenRef.current(null);
         },
         "expired-callback": () => {
-          // Token expired; user must try again
-          onToken(null);
+          // Token expired; user must try again (widget auto-resets)
+          onTokenRef.current(null);
         },
         "timeout-callback": () => {
-          // Widget challenge timed out; user must try again
-          onToken(null);
+          // Challenge timed out; user must try again (widget auto-resets)
+          onTokenRef.current(null);
         },
       });
-      widgetId.current = id;
-    }
+      widgetIdRef.current = id;
 
-    return () => {
-      // Cleanup on unmount
-      if (widgetId.current && window.turnstile) {
-        window.turnstile.remove(widgetId.current);
-        widgetId.current = null;
-      }
-    };
-  }, [containerId, onToken]);
+      return () => {
+        // Cleanup on unmount
+        if (widgetIdRef.current && window.turnstile) {
+          window.turnstile.remove(widgetIdRef.current);
+          widgetIdRef.current = null;
+        }
+      };
+    }, [scriptReady]);
 
-  // Reset the widget (clears token, user must complete again)
-  useEffect(() => {
-    const reset = () => {
-      if (widgetId.current && window.turnstile && !hasTimedOut) {
-        window.turnstile.reset(widgetId.current);
-      }
-      onToken(null);
-    };
+    // Reset the widget (clears token, user must complete again)
+    // Expose via ref so parent can call it on mount (not on token arrival)
+    useImperativeHandle(ref, () => ({
+      reset: () => {
+        if (widgetIdRef.current && window.turnstile && !hasTimedOut) {
+          window.turnstile.reset(widgetIdRef.current);
+        }
+        onTokenRef.current(null);
+      },
+    }));
 
-    // Expose the reset function via window so LoginForm can call it
-    window.__turnstileReset = reset;
+    if (!scriptReady) return null;
 
-    return () => {
-      delete window.__turnstileReset;
-    };
-  }, [hasTimedOut, onToken]);
+    return (
+      <div id={containerIdRef.current} className="mb-4 flex justify-center" />
+    );
+  }
+);
 
-  if (!containerId) return null;
+Turnstile.displayName = "Turnstile";
 
-  return (
-    <div id={containerId} className="mb-4 flex justify-center" />
-  );
-}
+export { Turnstile };

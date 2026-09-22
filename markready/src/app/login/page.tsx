@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useRef } from "react";
+import { useState, Suspense, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
@@ -29,9 +29,29 @@ function LoginForm() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  // Set when the CAPTCHA can never produce a token (script blocked, offline,
+  // widget stalled). Without this the submit button stays disabled forever:
+  // a null token is indistinguishable from "still waiting", so the widget
+  // failing to load would lock every affected user out of signing in.
+  const [captchaUnavailable, setCaptchaUnavailable] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const turnstileResetRef = useRef<(() => void) | null>(null);
+  const turnstileRef = useRef<{ reset: () => void } | null>(null);
+
+  // Memoize onToken so Turnstile effect doesn't re-run on every render
+  const handleToken = useCallback((token: string | null) => {
+    setCaptchaToken(token);
+  }, []);
+
+  const handleCaptchaUnavailable = useCallback(() => {
+    setCaptchaUnavailable(true);
+  }, []);
+
+  // Block submit only while the CAPTCHA might still deliver a token. Once it
+  // is known unavailable, let the request through — Supabase returns a clear
+  // error if CAPTCHA is enforced, which beats a permanently dead button.
+  const awaitingCaptcha =
+    !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken && !captchaUnavailable;
 
   const urlError = searchParams.get("error");
   const errorMessage =
@@ -53,8 +73,8 @@ function LoginForm() {
       setError(oauthError.message);
       setGoogleLoading(false);
       // Reset widget after failed attempt
-      if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
-        turnstileResetRef.current();
+      if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileRef.current) {
+        turnstileRef.current.reset();
       }
     }
     // On success the browser navigates away — no need to reset loading
@@ -80,15 +100,15 @@ function LoginForm() {
       if (signInError) {
         setError(signInError.message);
         // Reset widget after failed attempt
-        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
-          turnstileResetRef.current();
+        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileRef.current) {
+          turnstileRef.current.reset();
         }
       } else {
         setMessage("Check your email for a login link.");
         setEmail("");
         // Reset widget after successful magic link send (token is spent)
-        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
-          turnstileResetRef.current();
+        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileRef.current) {
+          turnstileRef.current.reset();
         }
       }
     } else {
@@ -101,8 +121,8 @@ function LoginForm() {
       if (signInError) {
         setError(signInError.message);
         // Reset widget after failed attempt
-        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileResetRef.current) {
-          turnstileResetRef.current();
+        if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && turnstileRef.current) {
+          turnstileRef.current.reset();
         }
       } else {
         router.push("/score");
@@ -165,7 +185,7 @@ function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              disabled={loading || googleLoading || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}
+              disabled={loading || googleLoading}
               className="w-full px-3 py-2 border border-[#E4DFD3] rounded-lg text-[#23282B] placeholder-[#667075] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 focus:border-[#1F5C4E] disabled:opacity-50 text-sm"
               placeholder="you@example.com"
             />
@@ -182,7 +202,7 @@ function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                disabled={loading || googleLoading || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}
+                disabled={loading || googleLoading}
                 className="w-full px-3 py-2 border border-[#E4DFD3] rounded-lg text-[#23282B] placeholder-[#667075] focus:outline-none focus:ring-2 focus:ring-[#1F5C4E]/30 focus:border-[#1F5C4E] disabled:opacity-50 text-sm"
                 placeholder="••••••••"
               />
@@ -191,17 +211,15 @@ function LoginForm() {
 
           {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
             <Turnstile
-              onToken={(token) => {
-                setCaptchaToken(token);
-                const w = window as unknown as { __turnstileReset?: () => void };
-                turnstileResetRef.current = w.__turnstileReset ?? null;
-              }}
+              ref={turnstileRef}
+              onToken={handleToken}
+              onUnavailable={handleCaptchaUnavailable}
             />
           )}
 
           <button
             type="submit"
-            disabled={loading || googleLoading || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}
+            disabled={loading || googleLoading || awaitingCaptcha}
             className="w-full bg-[#1F5C4E] text-white py-2.5 rounded-lg hover:bg-[#154136] disabled:opacity-50 font-medium text-sm transition-colors"
           >
             {loading
