@@ -541,6 +541,15 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
       }
       const data = await res.json();
       if (!current()) return;
+      if (res.status === 429 && data.code === "rate_limited") {
+        const retryTime = new Date(data.retry_at).getTime();
+        const minutesUntilRetry = Number.isFinite(retryTime) ? Math.max(1, Math.ceil((retryTime - Date.now()) / 60000)) : null;
+        const message = minutesUntilRetry
+          ? `You've submitted a lot in a short time. Your draft is kept here — try again in about ${minutesUntilRetry} minute${minutesUntilRetry !== 1 ? "s" : ""}.`
+          : "You've submitted a lot in a short time. Your draft is kept here — please try again later.";
+        setError(message);
+        return;
+      }
       if (res.status === 409 && data.code === "request_active") {
         setError("A response is already being scored. Your draft is kept here; check your progress or wait for the current request to finish.");
         return;
@@ -682,7 +691,7 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
 
             <div className="-mt-4 space-y-1">
               <p className="text-xs text-[#5B6266]">{TASK_DESCRIPTIONS[taskType]}</p>
-              <p className="text-xs text-[#9BA3A8]">
+              <p className="text-xs text-[#667075]">
                 <span className="font-medium text-[#5B6266]">Not sure which?</span>{" "}
                 Task 2 = opinion essay · Task 1 Academic = describe a chart or graph ·
                 Task 1 General = write a letter.
@@ -863,7 +872,7 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
             <div className="space-y-3">
               {topFix && (
                 <div className="rounded-2xl border border-[#1F5C4E]/20 bg-white px-6 py-5 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[#C97B4A]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#8F4E26]">
                     Your fastest win
                   </p>
                   <p className="mt-1 text-sm text-[#23282B] leading-relaxed">

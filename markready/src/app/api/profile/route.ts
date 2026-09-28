@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getScoringUsage, remainingMarks, isCohort, FREE_MARKS_TOTAL, PACK_MARKS, PACK_DAYS, PACK_PRICE_USD } from "@/lib/quota";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { writeProfile } from "@/lib/write-profile";
 
 /**
  * Where a user says they heard about us. Kept in sync with the options in
@@ -23,35 +24,6 @@ const REFERRAL_SOURCES = [
 const REFERRAL_SET = new Set<string>(REFERRAL_SOURCES);
 const MAX_DETAIL_CHARS = 200;
 
-/**
- * Writes profile fields, recreating the row if it is missing.
- *
- * A plain update against a missing row reports success having changed nothing
- * — which is exactly how a profile cleared in the Table Editor during testing
- * left an account stuck on /welcome forever. So: update first, which keeps
- * everything an existing row already holds; only if nothing matched, insert a
- * fresh row. Returns an error message, or null on success.
- */
-async function writeProfile(
-  service: SupabaseClient,
-  user: User,
-  fields: Record<string, unknown>
-): Promise<string | null> {
-  const { data: updated, error: updateError } = await service
-    .from("profiles")
-    .update(fields)
-    .eq("id", user.id)
-    .select("id");
-  if (updateError) return updateError.message;
-  if (updated && updated.length > 0) return null;
-
-  if (!user.email) return "Account has no email address";
-  const { error: insertError } = await service
-    .from("profiles")
-    .insert({ id: user.id, email: user.email, ...fields });
-  return insertError ? insertError.message : null;
-}
-
 /** Current cohort, onboarding state, and marks allowance — used by /score and /welcome. */
 export async function GET() {
   const supabase = await createClient();
@@ -59,6 +31,15 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Rate limit: 30 GET requests per minute per user
+  const limit = checkRateLimit(user.id, 30, 60000);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429,
+      headers: { "Retry-After": String(limit.retryAfterSeconds) },
+    });
+  }
 
   const service = createServiceClient();
   const { data: profile, error } = await service
@@ -101,10 +82,23 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Rate limit: 10 POST requests per minute per user
+  const limit = checkRateLimit(user.id, 10, 60000);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429,
+      headers: { "Retry-After": String(limit.retryAfterSeconds) },
+    });
+  }
+
   let body: unknown;
   try {
     body = await req.json();
   } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 

@@ -9,3 +9,6 @@
 # .claude/skills holds Windows symlinks that don't survive cross-OS checkout.
 # Collaborators regenerate them with `npx skills add` (see skills-lock.json).
 /.claude/skills/
+
+# Local regression tooling (embedded Postgres, pg) and throwaway test clusters.
+/.codex/

@@ -53,7 +53,7 @@ export function AnnotatedEssay({
               }
               className={`rounded px-0.5 underline decoration-2 underline-offset-4 transition-colors ${
                 openIndex === seg.weaknessIndex
-                  ? "bg-[#F7E9DF] decoration-[#C97B4A]"
+                  ? "bg-[#F7E9DF] decoration-[#8F4E26]"
                   : "bg-[#FDF6F1] decoration-[#E0B79B] hover:bg-[#F7E9DF]"
               }`}
             >
@@ -67,7 +67,7 @@ export function AnnotatedEssay({
         <div className="rounded-xl border border-[#E4DFD3] bg-[#FDF6F1] px-4 py-3 space-y-1.5">
           <div className="flex items-center gap-2">
             {openCriterion && (
-              <span className="px-2 py-0.5 rounded-full bg-[#F7E9DF] text-[#C97B4A] text-[11px] font-semibold">
+              <span className="px-2 py-0.5 rounded-full bg-[#F7E9DF] text-[#8F4E26] text-[11px] font-semibold">
                 {openCriterion}
               </span>
             )}

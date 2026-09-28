@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "/",
+  },
+};
 
 const TASK_TYPES = [
   {
@@ -46,14 +51,6 @@ const FEATURES = [
 ];
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Returning, signed-in users go straight to the app.
-  if (user) redirect("/score");
-
   return (
     <div className="min-h-screen bg-[#FAF8F3] text-[#23282B]">
       {/* Header */}
@@ -93,7 +90,7 @@ export default async function Home() {
             Sign in
           </Link>
         </div>
-        <p className="mt-4 text-xs text-[#9BA3A8]">
+        <p className="mt-4 text-xs text-[#667075]">
           AI-generated estimates to guide your practice — not official IELTS results.
         </p>
       </section>
@@ -149,7 +146,7 @@ export default async function Home() {
               key={t.label}
               className="rounded-2xl border border-[#E4DFD3] bg-white px-5 py-5"
             >
-              <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-[#C97B4A] bg-[#F7E9DF] rounded-full px-2.5 py-0.5">
+              <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-[#8F4E26] bg-[#F7E9DF] rounded-full px-2.5 py-0.5">
                 {t.tag}
               </span>
               <h3 className="mt-2 font-semibold text-sm">{t.label}</h3>
@@ -188,7 +185,7 @@ export default async function Home() {
               Sign in
             </Link>
           </div>
-          <p className="text-center text-xs text-[#9BA3A8] leading-relaxed max-w-2xl mx-auto">
+          <p className="text-center text-xs text-[#667075] leading-relaxed max-w-2xl mx-auto">
             Scores are AI-generated estimates, not official results. IELTS™ is a
             registered trademark of the British Council, IDP: IELTS Australia and
             Cambridge University Press &amp; Assessment. MarkReady is not affiliated

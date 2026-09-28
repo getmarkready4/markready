@@ -36,7 +36,7 @@ async function connect(role) {
   return client;
 }
 const call = async (client, name, args) => {
-  assert.ok(["scoring_usage", "reserve_scoring", "complete_scoring", "release_scoring"].includes(name));
+  assert.ok(["scoring_usage", "reserve_scoring", "complete_scoring", "release_scoring", "grant_mark_pack"].includes(name));
   const result = await client.query(`select public.${name}(${args.map((_, index) => `$${index + 1}`).join(",")}) as value`, args);
   return result.rows[0].value;
 };
@@ -75,6 +75,12 @@ try {
   await admin.query("begin");
   await admin.query(await readFile(path.join(root, "supabase/migrations/20260914125956_leased_scoring_reservations.sql"), "utf8"));
   await admin.query("commit");
+  await admin.query("begin");
+  await admin.query(await readFile(path.join(root, "supabase/migrations/20260917000000_free_marks_and_mark_packs.sql"), "utf8"));
+  await admin.query("commit");
+  await admin.query("begin");
+  await admin.query(await readFile(path.join(root, "supabase/migrations/20260928000000_scoring_attempt_limit.sql"), "utf8"));
+  await admin.query("commit");
   // Supabase's existing table grants, with service-role RLS bypass.
   await admin.query("grant select,insert,update,delete on all tables in schema public to service_role; grant select on all tables in schema public to authenticated");
   const [a, b] = await Promise.all([connect("service_role"), connect("service_role")]);
@@ -84,8 +90,13 @@ try {
     assert.equal(rows.length, 2);
     assert.deepEqual(rows.find((row) => row.id === historical).scores, { legacy: true });
     assert.equal(rows.find((row) => row.id === unfinished).reservation_expires_at, null);
-    assert.equal((await call(a, "scoring_usage", [historicalUser])).active, false);
-    assert.equal((await reserve(a, historicalUser)).code, "quota_exhausted");
+    const usage = await call(a, "scoring_usage", [historicalUser]);
+    assert.equal(usage.active, false);
+    assert.equal(usage.free_used, 1);
+    assert.equal(usage.free_remaining, 1);
+    const reservation = await reserve(a, historicalUser);
+    assert.ok(reservation.id);
+    assert.equal(await release(a, historicalUser, reservation.id), true);
     assert.equal((await complete(a, historicalUser, unfinished)).code, "reservation_expired");
   });
 
@@ -103,12 +114,14 @@ try {
 
   await check("completed marks consume quota and conditional release cannot delete them", async () => {
     const user = await newUser();
-    const slot = await reserve(a, user);
-    assert.ok((await complete(a, user, slot.id)).submission);
-    assert.equal(await release(b, user, slot.id), false);
-    assert.equal((await reserve(b, user)).code, "quota_exhausted");
-    assert.equal((await call(a, "scoring_usage", [user])).used_successful, 1);
-    assert.deepEqual((await admin.query("select scores from public.submissions where id=$1", [slot.id])).rows[0].scores, { test: "saved" });
+    const slot1 = await reserve(a, user);
+    assert.ok((await complete(a, user, slot1.id)).submission);
+    const slot2 = await reserve(b, user);
+    assert.ok((await complete(b, user, slot2.id)).submission);
+    assert.equal((await reserve(a, user)).code, "quota_exhausted");
+    assert.equal(await release(a, user, slot1.id), false);
+    assert.equal((await call(a, "scoring_usage", [user])).used_successful, 2);
+    assert.deepEqual((await admin.query("select scores from public.submissions where id=$1", [slot1.id])).rows[0].scores, { test: "saved" });
   });
 
   await check("expired workers cannot complete after replacement or affect another account", async () => {
@@ -125,19 +138,23 @@ try {
     assert.ok((await complete(b, user, replacement.id)).submission);
   });
 
-  await check("cross-midnight active work blocks overlap and completed work belongs to its start day", async () => {
+  await check("active work across UTC midnight blocks overlap; completed marks never reset", async () => {
     const user = await newUser();
-    const slot = await reserve(a, user);
-    await admin.query("update public.submissions set created_at=date_trunc('day',clock_timestamp() at time zone 'UTC') at time zone 'UTC' - interval '1 second' where id=$1", [slot.id]);
+    const slot1 = await reserve(a, user);
+    await admin.query("update public.submissions set created_at=date_trunc('day',clock_timestamp() at time zone 'UTC') at time zone 'UTC' - interval '1 second' where id=$1", [slot1.id]);
     await a.query("set timezone='Pacific/Honolulu'");
     const before = await call(a, "scoring_usage", [user]);
     assert.equal(before.used_successful, 0);
     assert.equal(before.active, true);
-    assert.equal(new Date(before.reset_at).getUTCHours(), 0);
     assert.equal((await reserve(b, user)).code, "request_active");
-    assert.ok((await complete(a, user, slot.id)).submission);
-    assert.equal((await call(a, "scoring_usage", [user])).used_successful, 0);
-    assert.ok((await reserve(b, user)).id);
+    assert.ok((await complete(a, user, slot1.id)).submission);
+    const after = await call(a, "scoring_usage", [user]);
+    assert.equal(after.used_successful, 1);
+    assert.equal(after.free_remaining, 1);
+    const slot2 = await reserve(b, user);
+    assert.ok(slot2.id);
+    assert.ok((await complete(b, user, slot2.id)).submission);
+    assert.equal((await reserve(a, user)).code, "quota_exhausted");
   });
 
   await check("staff remain unlimited even with concurrent work", async () => {
@@ -202,7 +219,16 @@ try {
   } }] });
   const routeModule = { exports: {} };
   runInThisContext(`(function(require,module,exports){${bundled.outputFiles[0].text}\n})`)(require, routeModule, routeModule.exports);
-  const post = () => routeModule.exports.POST({ json: async () => ({ question: "Synthetic question", essay: "Synthetic response words", taskType: "TASK2" }) });
+  const post = () => {
+    const body = JSON.stringify({ question: "Synthetic question", essay: "Synthetic response words", taskType: "TASK2" });
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(body);
+    return routeModule.exports.POST(new Request("http://localhost/api/score", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(bytes.length) },
+      body: bytes,
+    }));
+  };
 
   await check("two concurrent real route calls produce one model call and one saved score", async () => {
     let releaseModel;
@@ -257,6 +283,77 @@ try {
     assert.equal(Object.hasOwn(body, "remaining"), false);
     assert.equal((await call(a, "scoring_usage", [state.user])).used_successful, 1);
   });
+
+  await check("rate limiting: 10 granted+released reservations in an hour, 11th returns rate_limited", async () => {
+    const user = await newUser();
+    for (let i = 0; i < 10; i++) {
+      const slot = await reserve(a, user);
+      assert.ok(slot.id, `attempt ${i + 1} should succeed`);
+      await release(b, user, slot.id);
+    }
+    const result = await reserve(a, user);
+    assert.equal(result.code, "rate_limited", "11th attempt should be rate_limited");
+    assert.ok(result.retry_at, "rate_limited response should include retry_at");
+  });
+
+  await check("rate limiting: staff are never rate_limited", async () => {
+    const user = await newUser("staff");
+    for (let i = 0; i < 15; i++) {
+      const slot = await reserve(a, user);
+      assert.ok(slot.id, `staff attempt ${i + 1} should succeed`);
+      await release(b, user, slot.id);
+    }
+  });
+
+  await check("rate limiting: quota_exhausted users do not accrue attempt rows", async () => {
+    const user = await newUser();
+    const slot1 = await reserve(a, user);
+    await complete(a, user, slot1.id);
+    const slot2 = await reserve(b, user);
+    await complete(b, user, slot2.id);
+    assert.equal((await reserve(a, user)).code, "quota_exhausted");
+    const attempts = (await admin.query("select count(*) as cnt from public.scoring_attempts where user_id=$1", [user])).rows[0].cnt;
+    assert.equal(parseInt(attempts), 2, "quota_exhausted user should not have attempt row for failed reservation");
+  });
+
+  await check("mark pack deletion is protected (on delete no action)", async () => {
+    const user = await newUser();
+    const packResult = await call(a, "grant_mark_pack", [user, 20, 30, "test", "ext-1"]);
+    assert.ok(packResult.pack.id);
+    const packId = packResult.pack.id;
+    const slot = await reserve(a, user);
+    await admin.query("update public.submissions set pack_id=$1 where id=$2", [packId, slot.id]);
+    await assert.rejects(admin.query("delete from public.mark_packs where id=$1", [packId]), { code: "23503" });
+  });
+
+  await check("concurrent grant_mark_pack with same external_ref returns duplicate: true", async () => {
+    const user = await newUser();
+    const [result1, result2] = await Promise.all([
+      call(a, "grant_mark_pack", [user, 20, 30, "payment", "webhook-123"]),
+      call(b, "grant_mark_pack", [user, 20, 30, "payment", "webhook-123"]),
+    ]);
+    assert.ok(result1.pack.id);
+    assert.ok(result2.pack.id);
+    assert.equal(result1.pack.id, result2.pack.id, "both should return the same pack");
+    assert.notEqual(result1.duplicate, result2.duplicate, "one should have duplicate: true, one false");
+  });
+
+  await check("profile deletion with pack-backed completed submission succeeds (NO ACTION allows cascade)", async () => {
+    // WHY: NO ACTION (not RESTRICT) is checked at statement end, so profile cascades
+    // to submissions and mark_packs without hitting the FK constraint prematurely
+    const user = await newUser();
+    const packResult = await call(a, "grant_mark_pack", [user, 20, 30, "pack-delete-test", "ext-pd-1"]);
+    const packId = packResult.pack.id;
+    const slot = await reserve(a, user);
+    await admin.query("update public.submissions set pack_id=$1 where id=$2", [packId, slot.id]);
+    await complete(a, user, slot.id);
+    const submissionsBefore = (await admin.query("select count(*) as cnt from public.submissions where user_id=$1", [user])).rows[0].cnt;
+    assert.equal(parseInt(submissionsBefore), 1);
+    await admin.query("delete from public.profiles where id=$1", [user]);
+    const submissions = (await admin.query("select count(*) as cnt from public.submissions where user_id=$1", [user])).rows[0].cnt;
+    assert.equal(parseInt(submissions), 0, "submissions should be cascade-deleted with profile");
+  });
+
   console.log(`${passed} local Postgres regressions passed.`);
 } finally {
   await Promise.allSettled(clients.map((client) => client.end()));

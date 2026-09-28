@@ -249,6 +249,27 @@ describe("parse-scoring.ts", () => {
       expect(result).toBeNull();
     });
 
+    it("rejects off-grid bands not on 0.5 steps (6.3 invalid, 6.5 valid)", () => {
+      // WHY: IELTS bands are 0.5 steps only; malformed model output is rejected, not rounded
+      const invalid = {
+        ...validPayload,
+        criteria: {
+          ...validPayload.criteria,
+          task_response: { band: 6.3, strengths_noted: "Good", rationale: "OK" },
+        },
+      };
+      expect(parseScoringResult(JSON.stringify(invalid))).toBeNull();
+
+      const valid = {
+        ...validPayload,
+        criteria: {
+          ...validPayload.criteria,
+          task_response: { band: 6.5, strengths_noted: "Good", rationale: "OK" },
+        },
+      };
+      expect(parseScoringResult(JSON.stringify(valid))).not.toBeNull();
+    });
+
     it("rejects a partial Band 9 result and unknown or duplicate task criteria", () => {
       for (const criteria of [
         { task_response: { band: 9 } },

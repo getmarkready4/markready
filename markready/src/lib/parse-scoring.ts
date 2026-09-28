@@ -50,7 +50,7 @@ export function parseScoringResult(raw: string, taskType: TaskType = "TASK2"): S
   for (const [key, value] of Object.entries(criteria)) {
     if (typeof value === "object" && value !== null) {
       const v = value as Record<string, unknown>;
-      const band = typeof v.band === "number" && Number.isFinite(v.band) && v.band >= 1 && v.band <= 9
+      const band = typeof v.band === "number" && Number.isFinite(v.band) && v.band >= 1 && v.band <= 9 && Number.isInteger(v.band * 2)
         ? v.band
         : undefined;
       if (band !== undefined) {
