@@ -38,6 +38,9 @@ let testContext = {
   deletedIds: [] as string[],
   updatePayloads: [] as unknown[],
   isDeleting: false, // Track if we're in a delete() call
+  attemptCount: 0, // Attempts in current window (simulates DB state)
+  rateLimited: false, // Whether the next reservation should be rate-limited
+  invalidRetryAt: false, // Whether to omit retry_at from rate_limited response
 };
 
 type ChainMethod = (this: Record<string, unknown>, ...args: unknown[]) => unknown;
@@ -106,10 +109,19 @@ vi.mock("@/lib/supabase/service", () => ({
           };
           if (name === "reserve_scoring") {
             if (testContext.reservationError) return { data: null, error: { message: "function missing" } };
-            return { error: null, data: testContext.cohort !== "staff" && testContext.active
-              ? { ...usage, code: "request_active" }
-              : testContext.cohort !== "staff" && usage.remaining <= 0
-                ? { ...usage, code: "quota_exhausted" } : { ...usage, id: "ph-1" } };
+            if (testContext.rateLimited && testContext.cohort !== "staff") {
+              const retryAt = testContext.invalidRetryAt ? "invalid-date" : new Date(Date.now() + 60000).toISOString();
+              return { error: null, data: { ...usage, code: "rate_limited", retry_at: retryAt } };
+            }
+            if (testContext.cohort !== "staff" && testContext.active) {
+              return { error: null, data: { ...usage, code: "request_active" } };
+            }
+            if (testContext.cohort !== "staff" && usage.remaining <= 0) {
+              return { error: null, data: { ...usage, code: "quota_exhausted" } };
+            }
+            // Successful reservation increments attempt count (non-staff only)
+            if (testContext.cohort !== "staff") testContext.attemptCount++;
+            return { error: null, data: { ...usage, id: "ph-1" } };
           }
           if (name === "complete_scoring") {
             if (testContext.completionError) throw new Error("lost completion response");
@@ -210,7 +222,8 @@ describe("POST /api/score", () => {
     testContext = { isBanned: false, profileError: false, usedCount: 0, packRemaining: 0, active: false,
       reservationError: false, usageError: false, completionError: false, recoveryError: false, releaseError: false,
       completionRejected: false, recoveredScores: null,
-      cohort: "user", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false };
+      cohort: "user", referralSource: "reddit", deletedIds: [], updatePayloads: [], isDeleting: false,
+      attemptCount: 0, rateLimited: false, invalidRetryAt: false };
     mockCreate.mockClear();
     mockGetUser.mockClear();
   });
@@ -539,6 +552,38 @@ describe("POST /api/score", () => {
       const res = await POST(request());
       expect((await res.json()).code).toBe("outcome_uncertain");
       expect(testContext.deletedIds).toEqual(["ph-1"]);
+    });
+
+    it("returns 429 with Retry-After header when rate-limited", async () => {
+      // WHY: route must convert the DB's rate_limited verdict into a 429 with Retry-After,
+      // not fall through to the 503 uncertain-outcome path
+      testContext.rateLimited = true;
+      const res = await POST(request());
+      expect(res.status).toBe(429);
+      expect(res.headers.get("Retry-After")).toBeTruthy();
+      const data = await res.json() as Record<string, unknown>;
+      expect(data.code).toBe("rate_limited");
+      expect(data.error).toContain("Too many");
+      expect(data.retry_at).toBeTruthy();
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("allows staff to bypass rate limits", async () => {
+      testContext.cohort = "staff";
+      testContext.rateLimited = true;
+      mockCreate.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(validScoringJson()) }, finish_reason: "stop" }] });
+      const res = await POST(request());
+      expect(res.status).toBe(200);
+    });
+
+    it("falls back to 3600s Retry-After when retry_at is missing or invalid", async () => {
+      // WHY: malformed rate_limited response should not crash; use 1-hour fallback
+      testContext.rateLimited = true;
+      testContext.invalidRetryAt = true;
+      const res = await POST(request());
+      expect(res.status).toBe(429);
+      const retryAfter = res.headers.get("Retry-After");
+      expect(retryAfter).toBe("3600");
     });
   });
 

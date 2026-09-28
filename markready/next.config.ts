@@ -16,9 +16,10 @@ const nextConfig: NextConfig = {
 
     // X-Frame-Options and frame-ancestors 'none' are intentionally redundant:
     // frame-ancestors supersedes in CSP2+ browsers; XFO covers older agents.
+    const unsafeEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
+      `script-src 'self' 'unsafe-inline'${unsafeEval} https://challenges.cloudflare.com`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self'",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { writeProfile } from "@/lib/write-profile";
 
 // Valid IELTS bands a user may target: 4.0–9.0 in 0.5 steps.
 const ALLOWED_TARGETS = new Set([4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9]);
@@ -29,6 +30,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { target } = body as Record<string, unknown>;
 
   // `null` clears the goal; otherwise must be an allowed band.
@@ -45,13 +50,10 @@ export async function POST(req: NextRequest) {
   }
 
   const service = createServiceClient();
-  const { error } = await service
-    .from("profiles")
-    .update({ target_band: value })
-    .eq("id", user.id);
+  const failure = await writeProfile(service, user, { target_band: value });
 
-  if (error) {
-    console.error("Target band update failed:", error.message);
+  if (failure) {
+    console.error("Target band update failed:", failure);
     return NextResponse.json({ error: "Could not save your goal" }, { status: 500 });
   }
 

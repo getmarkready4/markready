@@ -1,5 +1,6 @@
-import { beforeEach, expect, it, vi } from "vitest";
-import { GET } from "./route";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+import { GET, POST } from "./route";
 
 const mocks = vi.hoisted(() => ({ user: vi.fn(), profile: vi.fn(), usage: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.user } }) }));
@@ -45,4 +46,42 @@ it("does not represent a missing migration as unused quota", async () => {
 it("requires an authenticated account before returning quota", async () => {
   mocks.user.mockResolvedValue({ data: { user: null } });
   expect((await GET()).status).toBe(401);
+});
+
+describe("POST /api/profile", () => {
+  function createRequest(body: unknown): NextRequest {
+    const text = JSON.stringify(body);
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(text);
+    return new Request("http://localhost/api/profile", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(bytes.byteLength) },
+      body: bytes,
+    }) as unknown as NextRequest;
+  }
+
+  beforeEach(() => {
+    mocks.user.mockResolvedValue({ data: { user: { id: "user-1", email: "test@example.com" } } });
+  });
+
+  it("returns 400 for null JSON body", async () => {
+    // WHY: null body would cause destructuring to throw an unhandled 500; must reject early
+    const req = new Request("http://localhost/api/profile", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "null",
+    }) as unknown as NextRequest;
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json() as Record<string, unknown>;
+    expect(data.error).toBe("Invalid JSON body");
+  });
+
+  it("returns 400 for array JSON body", async () => {
+    const req = createRequest(["referral_source"]);
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json() as Record<string, unknown>;
+    expect(data.error).toBe("Invalid JSON body");
+  });
 });

@@ -541,6 +541,15 @@ function AccountScorePage({ userId, userEmail, isCurrent }: { userId: string; us
       }
       const data = await res.json();
       if (!current()) return;
+      if (res.status === 429 && data.code === "rate_limited") {
+        const retryTime = new Date(data.retry_at).getTime();
+        const minutesUntilRetry = Number.isFinite(retryTime) ? Math.max(1, Math.ceil((retryTime - Date.now()) / 60000)) : null;
+        const message = minutesUntilRetry
+          ? `You've submitted a lot in a short time. Your draft is kept here — try again in about ${minutesUntilRetry} minute${minutesUntilRetry !== 1 ? "s" : ""}.`
+          : "You've submitted a lot in a short time. Your draft is kept here — please try again later.";
+        setError(message);
+        return;
+      }
       if (res.status === 409 && data.code === "request_active") {
         setError("A response is already being scored. Your draft is kept here; check your progress or wait for the current request to finish.");
         return;

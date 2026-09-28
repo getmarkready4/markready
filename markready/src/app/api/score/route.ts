@@ -278,6 +278,12 @@ export async function POST(req: NextRequest) {
       error: slot.code === "request_active" ? "A scoring request is already in progress." : "You've used all your marks",
     }, { status: slot.code === "request_active" ? 409 : 403 });
   }
+  if (slot.code === "rate_limited") {
+    const retryTime = new Date(slot.retry_at).getTime();
+    const retryAfterSecs = Number.isFinite(retryTime) ? Math.max(1, Math.ceil((retryTime - Date.now()) / 1000)) : 3600;
+    return NextResponse.json({ code: "rate_limited", error: "Too many scoring attempts. Try again later.", retry_at: slot.retry_at },
+      { status: 429, headers: { "Retry-After": String(retryAfterSecs) } });
+  }
   if (typeof slot.id !== "string") return uncertainOutcome();
   const placeholderId = slot.id;
 
